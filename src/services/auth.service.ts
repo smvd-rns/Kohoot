@@ -44,13 +44,34 @@ export const authService = {
     if (error) throw error
     if (!authData.user) throw new Error('Login failed')
 
-    const { data: profile, error: profileError } = await supabase
+    let { data: profile } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', authData.user.id)
-      .single()
+      .maybeSingle()
 
-    if (profileError) throw profileError
+    if (!profile) {
+      const userMeta = authData.user.user_metadata || {}
+      const { data: newProfile, error: createError } = await supabase
+        .from('profiles')
+        .insert({
+          id: authData.user.id,
+          email: authData.user.email!,
+          username: userMeta.username || authData.user.email!.split('@')[0],
+          display_name: userMeta.display_name || userMeta.username || authData.user.email!.split('@')[0],
+          role: userMeta.role || 'student',
+          avatar_seed: generateAvatarSeed(),
+          avatar_style: 'adventurer',
+          xp: 0,
+          level: 1,
+        })
+        .select()
+        .single()
+
+      if (createError) throw createError
+      profile = newProfile
+    }
+
     return profile
   },
 
