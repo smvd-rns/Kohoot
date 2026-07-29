@@ -64,12 +64,12 @@ export default function QuizLobbyPage() {
     const channel = supabase.channel(`lobby-${sessionId}`)
 
     channel
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'quiz_sessions', filter: `id=eq.${sessionId}` }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'kohoot', table: 'quiz_sessions', filter: `id=eq.${sessionId}` }, (payload) => {
         const updated = payload.new as QuizSession
         setSession(updated)
         if (updated.status === 'active') navigate(`/quiz/play/${sessionId}`)
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_participants', filter: `session_id=eq.${sessionId}` }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'kohoot', table: 'session_participants', filter: `session_id=eq.${sessionId}` }, (payload) => {
         setParticipants(p => [...p, payload.new as SessionParticipant])
       })
       .subscribe()

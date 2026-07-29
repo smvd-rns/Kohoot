@@ -177,7 +177,7 @@ export default function QuizPlayPage() {
   useEffect(() => {
     if (!sessionId) return
     const ch = supabase.channel(`game-${sessionId}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'quiz_sessions', filter: `id=eq.${sessionId}` }, async (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'kohoot', table: 'quiz_sessions', filter: `id=eq.${sessionId}` }, async (payload) => {
         const s = payload.new as { status: string; current_question_index: number }
         if (s.status === 'completed') { setIsFinished(true); navigate(`/quiz/results/${sessionId}`); return }
         const idx = s.current_question_index

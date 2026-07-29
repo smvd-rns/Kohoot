@@ -3,6 +3,9 @@
 -- Run this in Supabase SQL Editor (Database → SQL Editor)
 -- =============================================================
 
+SET search_path TO kohoot, public, auth;
+
+
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

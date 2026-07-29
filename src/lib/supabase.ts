@@ -13,6 +13,9 @@ export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co',
   supabaseAnonKey || 'placeholder-key',
   {
+    db: {
+      schema: 'kohoot'
+    },
     auth: {
       persistSession: true,
       autoRefreshToken: true,
