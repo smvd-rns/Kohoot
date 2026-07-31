@@ -33,14 +33,13 @@ export const useAuthStore = create<AuthState>()(
               .from('profiles')
               .select('*')
               .eq('id', session.user.id)
-              .single()
-            set({ profile })
+              .maybeSingle()
+            if (profile) set({ profile })
           } else {
             set({ profile: null })
           }
         } catch (err) {
           console.error('Auth init error:', err)
-          set({ profile: null })
         } finally {
           set({ isLoading: false, isInitialized: true })
         }

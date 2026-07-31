@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -6,10 +6,11 @@ import { z } from 'zod'
 import { motion } from 'framer-motion'
 import { Mail, Lock, User, Eye, EyeOff, GraduationCap, Shield } from 'lucide-react'
 import { Button, Input, Card } from '@/components/ui'
-import { authService } from '@/services/auth.service'
 import { useAuthStore } from '@/store/authStore'
+import { authService } from '@/services/auth.service'
 import toast from 'react-hot-toast'
 import { cn } from '@/lib/utils'
+import type { UserRole } from '@/types'
 
 const schema = z.object({
   display_name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -30,6 +31,7 @@ const roles = [
 export default function RegisterPage() {
   const [showPw, setShowPw] = useState(false)
   const navigate = useNavigate()
+  const profile = useAuthStore(s => s.profile)
   const setProfile = useAuthStore(s => s.setProfile)
 
   const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -39,21 +41,20 @@ export default function RegisterPage() {
 
   const selectedRole = watch('role')
 
+  useEffect(() => {
+    if (profile) {
+      navigate(profile.role === 'admin' ? '/admin' : '/student', { replace: true })
+    }
+  }, [profile, navigate])
+
   const onSubmit = async (data: FormData) => {
     try {
-      const profile = await authService.signUp({
-        email: data.email,
-        password: data.password,
-        username: data.username,
-        display_name: data.display_name,
-        role: data.role,
-      })
+      const profile = await authService.signUp(data)
       setProfile(profile)
-      toast.success('Account created! Welcome to QuizVerse 🎉')
-      navigate(data.role === 'admin' ? '/admin' : '/student')
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Registration failed'
-      toast.error(msg.includes('already') ? 'Email already registered' : msg)
+      toast.success('Account created successfully! Welcome 🎉')
+    } catch (err: any) {
+      const msg = err.message || 'Registration failed'
+      toast.error(msg)
     }
   }
 

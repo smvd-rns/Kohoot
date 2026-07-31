@@ -3,6 +3,44 @@ import type { Profile, AuthFormData } from '@/types'
 import { generateAvatarSeed } from '@/lib/utils'
 
 export const authService = {
+  async getOrCreateClerkProfile(clerkUser: any): Promise<Profile> {
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', clerkUser.id)
+      .maybeSingle()
+
+    if (existingProfile) {
+      return existingProfile
+    }
+
+    const email = clerkUser.emailAddresses[0]?.emailAddress || ''
+    const isSuperAdmin = email === import.meta.env.VITE_SUPER_ADMIN_EMAIL
+    const role = isSuperAdmin ? 'super_admin' : (clerkUser.publicMetadata?.role || clerkUser.unsafeMetadata?.role || 'admin')
+
+    const username = clerkUser.username || email.split('@')[0] || `user_${clerkUser.id.substring(0, 8)}`
+    const displayName = clerkUser.fullName || username
+
+    const { data: newProfile, error } = await supabase
+      .from('profiles')
+      .insert({
+        id: clerkUser.id,
+        email,
+        username,
+        display_name: displayName,
+        role,
+        avatar_seed: generateAvatarSeed(),
+        avatar_style: 'adventurer',
+        xp: 0,
+        level: 1,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    return newProfile
+  },
+
   async signUp(data: AuthFormData & { display_name: string; role: 'admin' | 'student' }): Promise<Profile> {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: data.email,

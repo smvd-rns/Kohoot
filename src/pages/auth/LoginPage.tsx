@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -6,8 +6,8 @@ import { z } from 'zod'
 import { motion } from 'framer-motion'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { Button, Input, Card } from '@/components/ui'
-import { authService } from '@/services/auth.service'
 import { useAuthStore } from '@/store/authStore'
+import { authService } from '@/services/auth.service'
 import toast from 'react-hot-toast'
 import type { UserRole } from '@/types'
 
@@ -21,7 +21,16 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
+  const profile = useAuthStore(s => s.profile)
   const setProfile = useAuthStore(s => s.setProfile)
+
+  useEffect(() => {
+    if (profile) {
+      const from = (location.state as { from?: { pathname: string } })?.from?.pathname
+      const homeMap: Record<UserRole, string> = { super_admin: '/superadmin', admin: '/admin', student: '/student' }
+      navigate(from ?? homeMap[profile.role], { replace: true })
+    }
+  }, [profile, navigate, location])
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -31,14 +40,10 @@ export default function LoginPage() {
     try {
       const profile = await authService.signIn(data.email, data.password)
       setProfile(profile)
-      toast.success(`Welcome back, ${profile.display_name}! 👋`)
-
-      const from = (location.state as { from?: { pathname: string } })?.from?.pathname
-      const homeMap: Record<UserRole, string> = { super_admin: '/superadmin', admin: '/admin', student: '/student' }
-      navigate(from ?? homeMap[profile.role], { replace: true })
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Login failed'
-      toast.error(msg.includes('Invalid') ? 'Incorrect email or password' : msg)
+      toast.success('Welcome back! 👋')
+    } catch (err: any) {
+      const msg = err.message || 'Login failed'
+      toast.error(msg)
     }
   }
 
