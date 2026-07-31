@@ -86,13 +86,13 @@ export default function HostSessionPage() {
     if (!sessionId) return
     
     const partsChannel = supabase.channel(`parts-${sessionId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'kohoot', table: 'session_participants', filter: `session_id=eq.${sessionId}` }, payload => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_participants', filter: `session_id=eq.${sessionId}` }, payload => {
         setParticipants(prev => [...prev, payload.new as any])
       })
       .subscribe()
 
     const ansChannel = supabase.channel(`ans-${sessionId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'kohoot', table: 'participant_answers', filter: `session_id=eq.${sessionId}` }, payload => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'participant_answers', filter: `session_id=eq.${sessionId}` }, payload => {
         const answer = payload.new as any
         setAnswers(prev => [...prev, answer])
       })
