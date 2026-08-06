@@ -25,7 +25,10 @@ export default function QuizLobbyPage() {
     if (audioRef.current) {
       audioRef.current.muted = isMuted;
       if (!isMuted && musicUrl) {
-        audioRef.current.play().catch(() => {});
+        audioRef.current.play().catch((err) => {
+          console.warn('Autoplay blocked, muting audio:', err);
+          setIsMuted(true);
+        });
       }
     }
   }, [isMuted, musicUrl]);
@@ -70,7 +73,7 @@ export default function QuizLobbyPage() {
         
         if (updated.status === 'active') {
           // If admin started the quiz, redirect immediately
-          navigate(`/student/play/${sessionId}`, { replace: true })
+          navigate(`/quiz/play/${sessionId}`, { replace: true })
         }
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_participants', filter: `session_id=eq.${sessionId}` }, (payload) => {

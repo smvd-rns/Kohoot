@@ -118,7 +118,10 @@ export default function QuizPlayPage() {
     if (audioRef.current) {
       audioRef.current.muted = isMuted;
       if (!isMuted && musicUrl) {
-        audioRef.current.play().catch(() => {});
+        audioRef.current.play().catch((err) => {
+          console.warn('Autoplay blocked, muting audio:', err);
+          setIsMuted(true);
+        });
       }
     }
   }, [isMuted, musicUrl]);

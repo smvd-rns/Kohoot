@@ -81,6 +81,12 @@ export default function JoinQuizPage() {
   }
 
   const onSubmit = async (data: FormData) => {
+    // Unlock browser audio context using this user gesture
+    try {
+      const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
+      audio.play().catch(() => {});
+    } catch {}
+
     if (step === 1) {
       await onNextStep()
       return
