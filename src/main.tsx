@@ -29,7 +29,12 @@ function AppInit({ children }: { children: React.ReactNode }) {
           .maybeSingle()
         
         if (profile) {
-          setProfile(profile)
+          if (profile.role === 'admin' && !profile.is_approved) {
+            await supabase.auth.signOut()
+            setProfile(null)
+          } else {
+            setProfile(profile)
+          }
         } else {
           // If profile doesn't exist yet, we don't clear it immediately as registration/sign-in flows
           // will create it and trigger their own update.

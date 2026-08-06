@@ -42,6 +42,7 @@ export interface Profile {
   bio?: string
   xp: number
   level: number
+  is_approved: boolean
   created_at: string
   updated_at: string
   // Relations

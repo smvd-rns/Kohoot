@@ -323,6 +323,41 @@ export const quizService = {
     return data ?? []
   },
 
+  async getSessionReport(sessionId: string) {
+    const { data: session, error: sessionErr } = await supabase
+      .from('quiz_sessions')
+      .select('*, quiz:quizzes(*)')
+      .eq('id', sessionId)
+      .single()
+    if (sessionErr) throw sessionErr
+
+    const { data: customFields, error: fieldsErr } = await supabase
+      .from('custom_fields')
+      .select('*')
+      .eq('quiz_id', session.quiz_id)
+      .order('order_index')
+    if (fieldsErr) throw fieldsErr
+
+    const { data: participants, error: partErr } = await supabase
+      .from('session_participants')
+      .select(`
+        *,
+        custom_field_responses (
+          field_id,
+          value
+        )
+      `)
+      .eq('session_id', sessionId)
+      .order('score', { ascending: false })
+    if (partErr) throw partErr
+
+    return {
+      session,
+      customFields,
+      participants: participants || []
+    }
+  },
+
   async getStudentHistory(studentId: string) {
     const { data, error } = await supabase
       .from('session_participants')

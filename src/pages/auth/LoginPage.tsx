@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion } from 'framer-motion'
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, ShieldAlert } from 'lucide-react'
 import { Button, Input, Card } from '@/components/ui'
 import { useAuthStore } from '@/store/authStore'
 import { authService } from '@/services/auth.service'
@@ -19,6 +19,7 @@ type FormData = z.infer<typeof schema>
 
 export default function LoginPage() {
   const [showPw, setShowPw] = useState(false)
+  const [pendingApproval, setPendingApproval] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
   const profile = useAuthStore(s => s.profile)
@@ -42,9 +43,41 @@ export default function LoginPage() {
       setProfile(profile)
       toast.success('Welcome back! 👋')
     } catch (err: any) {
-      const msg = err.message || 'Login failed'
-      toast.error(msg)
+      if (err.message?.includes('pending superadmin approval')) {
+        setPendingApproval(true)
+      } else {
+        const msg = err.message || 'Login failed'
+        toast.error(msg)
+      }
     }
+  }
+
+  if (pendingApproval) {
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+        <div className="text-center mb-8">
+          <div className="inline-flex w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-400 items-center justify-center mb-4 shadow-glow">
+            <ShieldAlert className="w-8 h-8" />
+          </div>
+          <h1 className="text-3xl font-black text-theme-primary">Approval Pending</h1>
+          <p className="text-theme-secondary mt-1">Your teacher/admin account is under review</p>
+        </div>
+
+        <Card>
+          <div className="space-y-4 text-center py-4">
+            <p className="text-sm text-theme-secondary leading-relaxed">
+              Thank you for registering with QuizVerse! To prevent misuse, all teacher/admin accounts must be approved by the superadmin before logging in.
+            </p>
+            <p className="text-xs text-brand-400 font-semibold bg-brand-500/10 py-2 rounded-xl">
+              Approval typically takes less than 24 hours.
+            </p>
+            <Button className="w-full mt-4" onClick={() => setPendingApproval(false)}>
+              Back to Sign In
+            </Button>
+          </div>
+        </Card>
+      </motion.div>
+    )
   }
 
   return (

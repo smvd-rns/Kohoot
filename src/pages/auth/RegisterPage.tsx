@@ -50,6 +50,12 @@ export default function RegisterPage() {
   const onSubmit = async (data: FormData) => {
     try {
       const profile = await authService.signUp(data)
+      if (profile.role === 'admin' && !profile.is_approved) {
+        await authService.signOut()
+        toast.success('Registration request sent! Awaiting Superadmin approval before you can log in.', { duration: 6000 })
+        navigate('/login')
+        return
+      }
       setProfile(profile)
       toast.success('Account created successfully! Welcome 🎉')
     } catch (err: any) {

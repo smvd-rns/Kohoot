@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, BookOpen, Users, BarChart2, Settings,
   Play, Palette, LogOut, Menu, X, ChevronRight,
-  Shield, Globe, Zap,
+  Shield, Globe, Zap, ClipboardList,
 } from 'lucide-react'
 
 interface NavItem {
@@ -21,6 +21,7 @@ const adminNav: NavItem[] = [
   { icon: LayoutDashboard, label: 'Dashboard',  to: '/admin' },
   { icon: BookOpen,        label: 'Quizzes',    to: '/admin/quizzes' },
   { icon: Play,            label: 'Sessions',   to: '/admin/sessions' },
+  { icon: ClipboardList,   label: 'Reports',    to: '/admin/reports' },
   { icon: Users,           label: 'Students',   to: '/admin/students' },
   { icon: BarChart2,       label: 'Analytics',  to: '/admin/analytics' },
   { icon: Palette,         label: 'Themes',     to: '/admin/themes' },

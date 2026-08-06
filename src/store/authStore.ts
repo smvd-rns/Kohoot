@@ -34,7 +34,14 @@ export const useAuthStore = create<AuthState>()(
               .select('*')
               .eq('id', session.user.id)
               .maybeSingle()
-            if (profile) set({ profile })
+            if (profile) {
+              if (profile.role === 'admin' && !profile.is_approved) {
+                await supabase.auth.signOut()
+                set({ profile: null })
+              } else {
+                set({ profile })
+              }
+            }
           } else {
             set({ profile: null })
           }

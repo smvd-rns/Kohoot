@@ -69,6 +69,7 @@ export const authService = {
         avatar_style: 'adventurer',
         xp: 0,
         level: 1,
+        is_approved: data.role !== 'admin',
       })
       .select()
       .single()
@@ -110,7 +111,12 @@ export const authService = {
       profile = newProfile
     }
 
-    return profile
+    if (profile.role === 'admin' && !profile.is_approved) {
+      await supabase.auth.signOut()
+      throw new Error('Your teacher/admin account is pending superadmin approval.')
+    }
+
+    return profile;
   },
 
   async signInAnonymously(displayName: string): Promise<Profile> {

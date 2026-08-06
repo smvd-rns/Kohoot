@@ -17,6 +17,7 @@ const QuizBuilderPage     = lazy(() => import('@/pages/admin/QuizBuilderPage'))
 const QuizSettingsPage    = lazy(() => import('@/pages/admin/QuizSettingsPage'))
 const StudentsPage        = lazy(() => import('@/pages/admin/StudentsPage'))
 const SessionsPage        = lazy(() => import('@/pages/admin/SessionsPage'))
+const ReportsPage         = lazy(() => import('@/pages/admin/ReportsPage'))
 const AnalyticsPage       = lazy(() => import('@/pages/admin/AnalyticsPage'))
 const ThemesPage          = lazy(() => import('@/pages/admin/ThemesPage'))
 const AdminSettingsPage   = lazy(() => import('@/pages/admin/SettingsPage'))
@@ -126,6 +127,7 @@ export const router = createBrowserRouter([
       { path: 'quizzes/:id/edit',element: <Suspense fallback={<PageLoader />}><QuizBuilderPage /></Suspense> },
       { path: 'quizzes/:id/settings', element: <Suspense fallback={<PageLoader />}><QuizSettingsPage /></Suspense> },
       { path: 'sessions',        element: <Suspense fallback={<PageLoader />}><SessionsPage /></Suspense> },
+      { path: 'reports',         element: <Suspense fallback={<PageLoader />}><ReportsPage /></Suspense> },
       { path: 'students',        element: <Suspense fallback={<PageLoader />}><StudentsPage /></Suspense> },
       { path: 'analytics',       element: <Suspense fallback={<PageLoader />}><AnalyticsPage /></Suspense> },
       { path: 'themes',          element: <Suspense fallback={<PageLoader />}><ThemesPage /></Suspense> },
