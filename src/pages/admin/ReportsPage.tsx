@@ -12,7 +12,8 @@ import {
   Download,
   Search,
   Trophy,
-  CheckCircle2
+  CheckCircle2,
+  ChevronRight
 } from 'lucide-react'
 import { formatDate, timeAgo, getTheme } from '@/lib/utils'
 import toast from 'react-hot-toast'
@@ -148,7 +149,7 @@ export default function ReportsPage() {
     <div className="space-y-6">
       <AnimatePresence mode="wait">
         {!report ? (
-          // SESSIONS LIST VIEW
+          // SESSIONS LIST VIEW (Clean Table Row List)
           <motion.div
             key="list"
             initial={{ opacity: 0, y: 15 }}
@@ -181,46 +182,73 @@ export default function ReportsPage() {
                 description={searchQuery ? "Try searching for another keyword" : "Conduct a quiz session to generate reports"}
               />
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredSessions.map(s => {
-                  const theme = getTheme(s.quiz?.theme as never ?? 'modern')
-                  const participantCount = (s as unknown as { participants?: [{ count: number }] }).participants?.[0]?.count ?? 0
+              <Card padding="none">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-theme text-xs font-semibold text-theme-secondary uppercase">
+                        <th className="px-6 py-4">Quiz</th>
+                        <th className="px-6 py-4 text-center">Room Code</th>
+                        <th className="px-6 py-4 text-center">Status</th>
+                        <th className="px-6 py-4">Conducted</th>
+                        <th className="px-6 py-4 text-center">Students</th>
+                        <th className="px-6 py-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-theme text-sm">
+                      {filteredSessions.map(s => {
+                        const theme = getTheme(s.quiz?.theme as never ?? 'modern')
+                        const participantCount = (s as unknown as { participants?: [{ count: number }] }).participants?.[0]?.count ?? 0
 
-                  return (
-                    <motion.div key={s.id} whileHover={{ y: -3 }} className="cursor-pointer" onClick={() => handleSelectSession(s.id)}>
-                      <Card className="h-full flex flex-col justify-between border border-theme hover:border-brand-500/50 transition-colors">
-                        <div className="space-y-4">
-                          <div className="flex justify-between items-start gap-2">
-                            <span className="text-2xl">{theme.emoji}</span>
-                            <Badge variant={s.status === 'completed' ? 'default' : s.status === 'active' ? 'success' : 'warning'}>
-                              {s.status}
-                            </Badge>
-                          </div>
-
-                          <div>
-                            <h3 className="font-bold text-theme-primary leading-snug line-clamp-1 mb-1">{s.quiz?.title || 'Quiz'}</h3>
-                            <div className="flex items-center gap-2 text-xs text-theme-secondary mb-3">
-                              <Calendar className="w-3.5 h-3.5" />
-                              <span>{formatDate(s.created_at)}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="pt-4 border-t border-theme flex items-center justify-between">
-                          <div className="text-center bg-white/5 px-2.5 py-1 rounded-lg">
-                            <span className="text-xs text-theme-secondary block">Room Code</span>
-                            <span className="text-base font-black text-theme-primary tracking-wider">{s.room_code}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-sm font-semibold text-brand-400">
-                            <Users className="w-4 h-4" />
-                            <span>{participantCount} Students</span>
-                          </div>
-                        </div>
-                      </Card>
-                    </motion.div>
-                  )
-                })}
-              </div>
+                        return (
+                          <tr
+                            key={s.id}
+                            className="hover:bg-white/3 transition-colors cursor-pointer"
+                            onClick={() => handleSelectSession(s.id)}
+                          >
+                            <td className="px-6 py-4 font-semibold text-theme-primary">
+                              <div className="flex items-center gap-3">
+                                <span className="text-xl bg-white/5 p-1.5 rounded-lg">{theme.emoji}</span>
+                                <div>
+                                  <p className="font-bold text-theme-primary">{s.quiz?.title || 'Quiz'}</p>
+                                  {s.quiz?.category && <p className="text-xs text-theme-secondary font-medium mt-0.5">{s.quiz.category}</p>}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <span className="font-mono bg-white/10 px-2.5 py-1 rounded text-theme-primary text-xs font-bold tracking-wider">
+                                {s.room_code}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              <Badge variant={s.status === 'completed' ? 'default' : s.status === 'active' ? 'success' : 'warning'}>
+                                {s.status}
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4 text-theme-secondary">
+                              <p className="font-medium">{formatDate(s.created_at)}</p>
+                              <p className="text-xs opacity-75 mt-0.5">{timeAgo(s.created_at)}</p>
+                            </td>
+                            <td className="px-6 py-4 text-center font-bold text-theme-primary">
+                              {participantCount}
+                            </td>
+                            <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
+                                onClick={() => handleSelectSession(s.id)}
+                              >
+                                View Report
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
             )}
           </motion.div>
         ) : (
