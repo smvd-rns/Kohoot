@@ -149,6 +149,7 @@ export const router = createBrowserRouter([
       { index: true,       element: <Suspense fallback={<PageLoader />}><SuperDashboard /></Suspense> },
       { path: 'admins',    element: <Suspense fallback={<PageLoader />}><ManageAdmins /></Suspense> },
       { path: 'analytics', element: <Suspense fallback={<PageLoader />}><PlatformAnalytics /></Suspense> },
+      { path: 'reports',   element: <Suspense fallback={<PageLoader />}><ReportsPage /></Suspense> },
     ],
   },
 

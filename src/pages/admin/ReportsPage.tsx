@@ -53,8 +53,8 @@ export default function ReportsPage() {
     if (!profile?.id) return
     setLoading(true)
     Promise.all([
-      quizService.getAdminSessions(profile.id),
-      quizService.getCrossSessionLeaderboard(profile.id)
+      quizService.getAdminSessions(profile.id, profile.role),
+      quizService.getCrossSessionLeaderboard(profile.id, undefined, undefined, profile.role)
     ])
       .then(([sessionsData, allTimeData]) => {
         setSessions(sessionsData as unknown as QuizSession[])

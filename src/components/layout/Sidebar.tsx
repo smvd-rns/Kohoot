@@ -31,6 +31,7 @@ const adminNav: NavItem[] = [
 const superAdminNav: NavItem[] = [
   { icon: Shield,          label: 'SA Dashboard', to: '/superadmin' },
   { icon: Users,           label: 'Manage Admins',to: '/superadmin/admins' },
+  { icon: BarChart2,       label: 'Reports',      to: '/superadmin/reports' },
   { icon: Globe,           label: 'Platform',     to: '/superadmin/analytics' },
   { icon: Settings,        label: 'Settings',     to: '/superadmin/settings' },
 ]

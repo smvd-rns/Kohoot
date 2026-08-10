@@ -437,7 +437,7 @@ export const quizService = {
   // ── Cross-Session All-Time Leaderboard ─────────────────────────────────────
   // Aggregates scores for registered (non-guest) students across all admin sessions.
   // Guest emails always start with 'guest_', so we exclude them.
-  async getCrossSessionLeaderboard(adminId: string, dateFrom?: string, dateTo?: string) {
+  async getCrossSessionLeaderboard(adminId: string, dateFrom?: string, dateTo?: string, role?: string) {
     let query = supabase
       .from('session_participants')
       .select(`
@@ -454,9 +454,9 @@ export const quizService = {
     if (error) throw error
     if (!data) return []
 
-    // Filter: only this admin's sessions, only registered students (non-guest email)
+    // Filter: only this admin's sessions (unless super_admin), only registered students (non-guest email)
     const filtered = (data as any[]).filter(row => {
-      const isAdminSession = row.session?.admin_id === adminId
+      const isAdminSession = role === 'super_admin' || row.session?.admin_id === adminId
       const isRegistered = row.profile?.email && !row.profile.email.startsWith('guest_')
       if (!isAdminSession || !isRegistered) return false
       if (dateFrom && row.session?.created_at < dateFrom) return false
@@ -505,11 +505,16 @@ export const quizService = {
       }))
   },
 
-  async getAdminSessions(adminId: string) {
-    const { data, error } = await supabase
+  async getAdminSessions(adminId: string, role?: string) {
+    let query = supabase
       .from('quiz_sessions')
       .select('*, quiz:quizzes(title, thumbnail_url), participants:session_participants(count)')
-      .eq('admin_id', adminId)
+      
+    if (role !== 'super_admin') {
+      query = query.eq('admin_id', adminId)
+    }
+
+    const { data, error } = await query
       .order('created_at', { ascending: false })
     if (error) throw error
     return data ?? []
