@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -25,13 +25,16 @@ export default function LoginPage() {
   const profile = useAuthStore(s => s.profile)
   const setProfile = useAuthStore(s => s.setProfile)
 
+  const [searchParams] = useSearchParams()
+
   useEffect(() => {
     if (profile) {
-      const from = (location.state as { from?: { pathname: string } })?.from?.pathname
+      const redirectUrl = searchParams.get('redirect')
+      const from = redirectUrl || (location.state as { from?: { pathname: string } })?.from?.pathname
       const homeMap: Record<UserRole, string> = { super_admin: '/superadmin', admin: '/admin', student: '/student' }
       navigate(from ?? homeMap[profile.role], { replace: true })
     }
-  }, [profile, navigate, location])
+  }, [profile, navigate, location, searchParams])
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),

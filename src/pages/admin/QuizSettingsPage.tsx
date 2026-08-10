@@ -150,13 +150,49 @@ export default function QuizSettingsPage() {
 
       {/* Custom registration fields */}
       <Card>
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-theme-primary">Registration Fields</h2>
-          <Button size="sm" variant="outline" leftIcon={<Plus className="w-4 h-4" />} onClick={addField}>Add Field</Button>
+          <Button size="sm" variant="outline" leftIcon={<Plus className="w-4 h-4" />} onClick={addField}>Add Custom Field</Button>
         </div>
-        <p className="text-sm text-theme-secondary mb-4">Students will fill these fields before joining the quiz.</p>
+        <p className="text-sm text-theme-secondary mb-6">Students will fill these fields before joining the quiz.</p>
+
+        {/* Common Field Toggles */}
+        <div className="bg-white/3 border border-theme rounded-2xl p-4 mb-6 space-y-3">
+          <p className="text-xs font-black uppercase tracking-wider text-theme-secondary mb-1">📝 Common Fields (Recommended)</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {([
+              { label: 'Name', type: 'text' },
+              { label: 'Email ID', type: 'email' },
+              { label: 'Mobile no', type: 'tel' },
+            ] as const).map(common => {
+              const isEnabled = customFields.some(f => f.label?.trim().toLowerCase() === common.label.toLowerCase())
+              const toggleField = (enable: boolean) => {
+                if (enable) {
+                  setCustomFields(f => {
+                    // Check if already exists to prevent duplicate addition
+                    if (f.some(x => x.label?.trim().toLowerCase() === common.label.toLowerCase())) return f
+                    return [...f, { label: common.label, field_type: common.type, is_required: true, order_index: f.length }]
+                  })
+                } else {
+                  setCustomFields(f => f.filter(x => x.label?.trim().toLowerCase() !== common.label.toLowerCase()))
+                }
+              }
+
+              return (
+                <div key={common.label} className="flex items-center justify-between p-2.5 glass rounded-xl">
+                  <div>
+                    <p className="text-sm font-bold text-theme-primary">{common.label}</p>
+                    <p className="text-[10px] text-theme-secondary mt-0.5">Collect {common.label.toLowerCase()}</p>
+                  </div>
+                  <Toggle checked={isEnabled} onChange={toggleField} />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
         {customFields.length === 0 ? (
-          <p className="text-sm text-theme-secondary text-center py-6">No custom fields. Add one above.</p>
+          <p className="text-sm text-theme-secondary text-center py-6">No custom fields configured. Toggle the common ones or add custom fields above.</p>
         ) : (
           <div className="space-y-3">
             {customFields.map((f, i) => (

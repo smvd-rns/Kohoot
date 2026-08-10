@@ -41,7 +41,7 @@ export const authService = {
     return newProfile
   },
 
-  async signUp(data: AuthFormData & { display_name: string; role: 'admin' | 'student' }): Promise<Profile> {
+  async signUp(data: AuthFormData & { display_name: string; role: 'admin' | 'student'; phone?: string }): Promise<Profile> {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
@@ -50,6 +50,7 @@ export const authService = {
           username: data.username,
           display_name: data.display_name,
           role: data.role,
+          phone: data.phone,
         },
       },
     })
@@ -70,6 +71,7 @@ export const authService = {
         xp: 0,
         level: 1,
         is_approved: data.role !== 'admin',
+        phone: data.phone || null,
       })
       .select()
       .single()

@@ -49,7 +49,7 @@ export function scorePercent(score: number, total: number): number {
 
 // ── XP needed for next level ──────────────────────────────────────────────────
 export function xpForLevel(level: number): number {
-  return level * 100 * (1 + level * 0.1)
+  return Math.round(level * 100 * (1 + level * 0.1))
 }
 
 // ── Level from XP ────────────────────────────────────────────────────────────

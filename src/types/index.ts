@@ -25,7 +25,9 @@ export type QuizTheme =
   | 'festival'
   | 'minimal'
 
-export type SessionStatus = 'waiting' | 'active' | 'paused' | 'completed'
+export type SessionStatus = 'waiting' | 'active' | 'paused' | 'completed' | 'self_paced'
+export type SessionMode = 'live' | 'self_paced'
+export type SessionParticipantMode = 'any' | 'registered_only'
 export type FieldType = 'text' | 'number' | 'email' | 'tel' | 'dropdown' | 'radio' | 'checkbox'
 
 // =====================================================
@@ -40,6 +42,7 @@ export interface Profile {
   avatar_seed: string
   avatar_style: string
   bio?: string
+  phone?: string
   xp: number
   level: number
   is_approved: boolean
@@ -134,6 +137,9 @@ export interface QuizSession {
   admin_id: string
   room_code: string
   status: SessionStatus
+  mode: SessionMode
+  participant_mode: SessionParticipantMode
+  deadline?: string
   current_question_index: number
   started_at?: string
   ended_at?: string
@@ -159,6 +165,8 @@ export interface SessionParticipant {
   rank?: number
   joined_at: string
   finished_at?: string
+  student_question_index: number   // for self-paced: which question the student is on
+  is_finished: boolean             // for self-paced: did the student complete all questions?
   // Relations
   profile?: Profile
   custom_field_responses?: CustomFieldResponse[]

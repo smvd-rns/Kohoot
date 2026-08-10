@@ -4,8 +4,8 @@ import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Hash, ArrowRight, User } from 'lucide-react'
-import { Button, Input, Card } from '@/components/ui'
+import { Hash, ArrowRight, User, Clock, AlertTriangle } from 'lucide-react'
+import { Button, Input, Card, Badge } from '@/components/ui'
 import { quizService } from '@/services/quiz.service'
 import { authService } from '@/services/auth.service'
 import { useAuthStore } from '@/store/authStore'
@@ -27,14 +27,47 @@ export default function JoinQuizPage() {
   const [step, setStep] = useState(1)
   const [customFields, setCustomFields] = useState<CustomField[]>([])
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionMode, setSessionMode] = useState<'live' | 'self_paced'>('live')
+  const [deadline, setDeadline] = useState<string | null>(null)
+  const [deadlinePassed, setDeadlinePassed] = useState(false)
+  const [quizTitle, setQuizTitle] = useState('')
+  const [participantMode, setParticipantMode] = useState<'any' | 'registered_only'>('any')
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false)
+  const [allowRetakes, setAllowRetakes] = useState(true)
 
-  const { register, handleSubmit, getValues, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, getValues, setValue, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       code: searchParams.get('code') ?? '',
       nickname: '',
     }
   })
+
+  // Auto pre-fill registration fields from logged-in profile
+  useEffect(() => {
+    if (!profile || customFields.length === 0) return
+    customFields.forEach(field => {
+      const labelLower = field.label.trim().toLowerCase()
+      
+      // Strict name matching: only match "name" / "student name" / "full name" / "your name"
+      // Do NOT match "college name", "clg name", "school name", "class name", etc.
+      const isStrictName = ['name', 'full name', 'student name', 'your name'].includes(labelLower)
+      
+      if (labelLower.includes('email')) {
+        if (profile.email && !profile.email.startsWith('guest_')) {
+          setValue(field.id, profile.email)
+        }
+      } else if (isStrictName) {
+        if (profile.display_name && !profile.display_name.startsWith('guest_')) {
+          setValue(field.id, profile.display_name)
+        }
+      } else if (labelLower.includes('phone') || labelLower.includes('mobile') || labelLower.includes('tel') || labelLower.includes('contact')) {
+        if (profile.phone) {
+          setValue(field.id, profile.phone)
+        }
+      }
+    })
+  }, [profile, customFields, setValue])
 
   const onNextStep = async () => {
     const code = getValues('code')
@@ -47,11 +80,53 @@ export default function JoinQuizPage() {
       const session = await quizService.getSessionByCode(code)
       if (!session) throw new Error('Session not found')
       setSessionId(session.id)
+      setSessionMode((session as any).mode ?? 'live')
+      setQuizTitle((session as any).quiz?.title ?? 'Quiz')
+
+      // Check deadline for self-paced
+      if ((session as any).mode === 'self_paced' && (session as any).deadline) {
+        const dl = (session as any).deadline as string
+        setDeadline(dl)
+        if (new Date(dl).getTime() < Date.now()) {
+          setDeadlinePassed(true)
+          setStep(2)
+          setLoading(false)
+          return
+        }
+      }
+
+      setParticipantMode((session as any).participant_mode ?? 'any')
+
       const fields = await quizService.getCustomFields(session.quiz_id)
       setCustomFields(fields)
-      
+
+      // Retake validation logic
+      let hasCompleted = false
+      const canRetake = (session as any).quiz?.allow_retakes ?? true
+      setAllowRetakes(canRetake)
+
+      if (profile) {
+        const part = await quizService.getStudentParticipant(session.id, profile.id)
+        
+        if (part && part.is_finished) {
+          hasCompleted = true
+        }
+
+        if (hasCompleted) {
+          if (!canRetake) {
+            setAlreadyCompleted(true)
+            setStep(2)
+            setLoading(false)
+            return
+          } else if (part && part.is_finished) {
+            // Reset their progress so they can retry clean in this session
+            await quizService.resetParticipantProgress(part.id)
+          }
+        }
+      }
+
       if (profile && fields.length === 0) {
-        await executeJoin(session.id, profile, {})
+        await executeJoin(session.id, profile, {}, (session as any).mode ?? 'live')
       } else {
         setStep(2)
       }
@@ -67,9 +142,9 @@ export default function JoinQuizPage() {
     }
   }, [searchParams])
 
-  const executeJoin = async (sId: string, currentProfile: any, data: any) => {
+  const executeJoin = async (sId: string, currentProfile: any, data: any, mode: string) => {
     const p = await quizService.joinSession(sId, currentProfile.id, currentProfile.display_name, currentProfile.avatar_seed)
-    
+
     if (customFields.length > 0) {
       const responses = customFields.map(f => ({
         field_id: f.id,
@@ -77,20 +152,27 @@ export default function JoinQuizPage() {
       }))
       await quizService.saveCustomFieldResponses(p.id, responses)
     }
-    navigate(`/quiz/lobby/${sId}`)
+
+    if (mode === 'self_paced') {
+      navigate(`/quiz/self-paced/${sId}`)
+    } else {
+      navigate(`/quiz/lobby/${sId}`)
+    }
   }
 
   const onSubmit = async (data: FormData) => {
-    // Unlock browser audio context using this user gesture
+    // Unlock browser audio context
     try {
-      const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA');
-      audio.play().catch(() => {});
+      const audio = new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA')
+      audio.play().catch(() => {})
     } catch {}
 
     if (step === 1) {
       await onNextStep()
       return
     }
+
+    if (deadlinePassed) return
 
     setLoading(true)
     try {
@@ -102,6 +184,16 @@ export default function JoinQuizPage() {
           setLoading(false)
           return
         }
+      }
+
+      const isRegisteredOnly = participantMode === 'registered_only'
+      const isGuest = currentProfile?.email?.startsWith('guest_')
+      const isAnonymous = !currentProfile || isGuest
+
+      if (isRegisteredOnly && isAnonymous) {
+        toast.error('This quiz session is restricted to registered members only. Please log in.')
+        setLoading(false)
+        return
       }
 
       if (!currentProfile) {
@@ -123,7 +215,7 @@ export default function JoinQuizPage() {
         }
       }
 
-      await executeJoin(sessionId!, currentProfile, data)
+      await executeJoin(sessionId!, currentProfile, data, sessionMode)
     } catch (err: any) {
       toast.error(err.message || 'Failed to join')
     } finally { setLoading(false) }
@@ -132,9 +224,13 @@ export default function JoinQuizPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8">
       <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-        <div className="text-6xl mb-4">🎮</div>
-        <h1 className="text-3xl font-black text-theme-primary">Join a Quiz</h1>
-        <p className="text-theme-secondary mt-2">Enter the room code from your teacher</p>
+        <div className="text-6xl mb-4">{sessionMode === 'self_paced' && step === 2 ? '📋' : '🎮'}</div>
+        <h1 className="text-3xl font-black text-theme-primary">
+          {step === 1 ? 'Join a Quiz' : sessionMode === 'self_paced' ? 'Self-Paced Quiz' : 'Join Quiz'}
+        </h1>
+        <p className="text-theme-secondary mt-2">
+          {step === 1 ? 'Enter the room code from your teacher' : quizTitle || 'Get ready to answer!'}
+        </p>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="w-full max-w-md">
@@ -149,16 +245,76 @@ export default function JoinQuizPage() {
                 className="text-2xl text-center font-black tracking-widest uppercase"
                 {...register('code')}
               />
+            ) : alreadyCompleted ? (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-4 space-y-4">
+                <div className="text-5xl">🏆</div>
+                <p className="font-bold text-brand-400 text-lg">Quiz Already Submitted</p>
+                <p className="text-sm text-theme-secondary">
+                  You have already completed "<strong className="text-theme-primary">{quizTitle}</strong>". 
+                  Retakes are not allowed for this quiz.
+                </p>
+                <Button type="button" className="w-full mt-2" onClick={() => navigate(`/quiz/results/${sessionId}`)}>
+                  View My Results
+                </Button>
+              </motion.div>
+            ) : deadlinePassed ? (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-4 space-y-3">
+                <div className="text-5xl">⏰</div>
+                <p className="font-bold text-danger-400">Quiz Deadline Passed</p>
+                <p className="text-sm text-theme-secondary">
+                  The deadline for "<strong className="text-theme-primary">{quizTitle}</strong>" has passed. You can no longer submit answers.
+                </p>
+              </motion.div>
             ) : (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
-                {!profile && (
-                  <Input
-                    label="Your Nickname"
-                    placeholder="Enter your name"
-                    leftIcon={<User className="w-4 h-4" />}
-                    error={errors.nickname?.message as string}
-                    {...register('nickname')}
-                  />
+                {/* Self-paced info card */}
+                {sessionMode === 'self_paced' && (
+                  <div className="glass rounded-2xl p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="warning">📋 Self-Paced</Badge>
+                      <span className="text-sm font-medium text-theme-primary">{quizTitle}</span>
+                    </div>
+                    {deadline && (
+                      <div className={`flex items-center gap-1.5 text-sm ${new Date(deadline).getTime() - Date.now() < 3600000 ? 'text-danger-400' : 'text-theme-secondary'}`}>
+                        {new Date(deadline).getTime() - Date.now() < 3600000
+                          ? <AlertTriangle className="w-4 h-4" />
+                          : <Clock className="w-4 h-4" />}
+                        <span>Deadline: <strong>{new Date(deadline).toLocaleString()}</strong></span>
+                      </div>
+                    )}
+                    <p className="text-xs text-theme-secondary">Take this quiz at your own pace. Each question has its own timer.</p>
+                  </div>
+                )}
+
+                {/* Login required block for registered-only sessions */}
+                {participantMode === 'registered_only' && (!profile || profile.email.startsWith('guest_')) ? (
+                  <div className="glass border border-red-500/30 rounded-2xl p-5 text-center space-y-4">
+                    <div className="text-3xl">🔒</div>
+                    <p className="font-bold text-theme-primary">Registered Students Only</p>
+                    <p className="text-xs text-theme-secondary">
+                      The teacher has configured this session to only allow registered students so all your scores can be tracked. Guests are not allowed.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1" type="button" onClick={() => navigate(`/login?redirect=${encodeURIComponent(`/student/join?code=${getValues('code')}`)}`)}>
+                        Sign In
+                      </Button>
+                      <Button className="flex-1" type="button" onClick={() => navigate(`/register?redirect=${encodeURIComponent(`/student/join?code=${getValues('code')}`)}`)}>
+                        Create Account
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {!profile && (
+                      <Input
+                        label="Your Nickname"
+                        placeholder="Enter your name"
+                        leftIcon={<User className="w-4 h-4" />}
+                        error={errors.nickname?.message as string}
+                        {...register('nickname')}
+                      />
+                    )}
+                  </>
                 )}
                 {customFields.map(field => (
                   <Input
@@ -172,9 +328,18 @@ export default function JoinQuizPage() {
               </motion.div>
             )}
 
-            <Button type="submit" className="w-full" size="lg" isLoading={loading} rightIcon={<ArrowRight className="w-5 h-5" />}>
-              {step === 1 ? 'Continue' : 'Join Quiz'}
-            </Button>
+            {/* Disable submit button if login is required, deadline is passed, or already completed */}
+            {!deadlinePassed && !alreadyCompleted && !(participantMode === 'registered_only' && (!profile || profile.email.startsWith('guest_'))) && (
+              <Button type="submit" className="w-full" size="lg" isLoading={loading} rightIcon={<ArrowRight className="w-5 h-5" />}>
+                {step === 1 ? 'Continue' : sessionMode === 'self_paced' ? 'Start Quiz' : 'Join Quiz'}
+              </Button>
+            )}
+
+            {(deadlinePassed || alreadyCompleted) && (
+              <Button type="button" variant="outline" className="w-full" onClick={() => navigate('/student')}>
+                Back to Dashboard
+              </Button>
+            )}
           </form>
           {step === 1 && (
             <div className="mt-4 text-center">

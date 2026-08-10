@@ -3,11 +3,28 @@ import type { QuizAnalytics, PlatformStats } from '@/types'
 
 export const analyticsService = {
   async getAdminStats(adminId: string) {
-    const [quizzes, sessions, students] = await Promise.all([
+    const [quizzes, sessions] = await Promise.all([
       supabase.from('quizzes').select('id', { count: 'exact' }).eq('admin_id', adminId),
       supabase.from('quiz_sessions').select('id', { count: 'exact' }).eq('admin_id', adminId),
-      supabase.from('profiles').select('id', { count: 'exact' }).eq('role', 'student').eq('admin_id', adminId),
     ])
+
+    const { data: activeSessions } = await supabase
+      .from('quiz_sessions')
+      .select('id')
+      .eq('admin_id', adminId)
+
+    let totalStudents = 0
+    if (activeSessions?.length) {
+      const sIds = activeSessions.map(s => s.id)
+      const { data: parts } = await supabase
+        .from('session_participants')
+        .select('student_id')
+        .in('session_id', sIds)
+      
+      if (parts?.length) {
+        totalStudents = new Set(parts.map(p => p.student_id)).size
+      }
+    }
 
     // Get avg score from recent sessions
     const { data: recentSessions } = await supabase
@@ -32,7 +49,7 @@ export const analyticsService = {
     return {
       totalQuizzes: quizzes.count ?? 0,
       totalSessions: sessions.count ?? 0,
-      totalStudents: students.count ?? 0,
+      totalStudents,
       avgScore,
     }
   },

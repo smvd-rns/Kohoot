@@ -21,7 +21,8 @@ const ReportsPage         = lazy(() => import('@/pages/admin/ReportsPage'))
 const AnalyticsPage       = lazy(() => import('@/pages/admin/AnalyticsPage'))
 const ThemesPage          = lazy(() => import('@/pages/admin/ThemesPage'))
 const AdminSettingsPage   = lazy(() => import('@/pages/admin/SettingsPage'))
-const HostSessionPage     = lazy(() => import('@/pages/admin/HostSessionPage'))
+const HostSessionPage       = lazy(() => import('@/pages/admin/HostSessionPage'))
+const SelfPacedManagePage   = lazy(() => import('@/pages/admin/SelfPacedManagePage'))
 
 // Super Admin
 const SuperDashboard      = lazy(() => import('@/pages/superadmin/SuperDashboard'))
@@ -37,6 +38,7 @@ const ResultsPage         = lazy(() => import('@/pages/student/ResultsPage'))
 const AchievementsPage    = lazy(() => import('@/pages/student/AchievementsPage'))
 const ProfilePage         = lazy(() => import('@/pages/student/ProfilePage'))
 const HistoryPage         = lazy(() => import('@/pages/student/HistoryPage'))
+const SelfPacedPlayPage   = lazy(() => import('@/pages/student/SelfPacedPlayPage'))
 
 // ── Loading fallback ─────────────────────────────────────────────────────────
 function PageLoader() {
@@ -196,6 +198,23 @@ export const router = createBrowserRouter([
     element: (
       <AuthGuardWrapper roles={['student']}>
         <Suspense fallback={<PageLoader />}><ResultsPage /></Suspense>
+      </AuthGuardWrapper>
+    ),
+  },
+
+  {
+    path: '/admin/sessions/:sessionId/self-paced',
+    element: (
+      <AuthGuardWrapper roles={['admin', 'super_admin']}>
+        <Suspense fallback={<PageLoader />}><SelfPacedManagePage /></Suspense>
+      </AuthGuardWrapper>
+    ),
+  },
+  {
+    path: '/quiz/self-paced/:sessionId',
+    element: (
+      <AuthGuardWrapper roles={['student']}>
+        <Suspense fallback={<PageLoader />}><SelfPacedPlayPage /></Suspense>
       </AuthGuardWrapper>
     ),
   },

@@ -84,16 +84,19 @@ export const quizService = {
     // Duplicate questions and options
     if (questions) {
       for (const q of questions) {
-        const { answer_options, ...qData } = q
-        const { data: newQ } = await supabase
+        const { answer_options, id: _qId, created_at: _qCreated, ...qData } = q
+        const { data: newQ, error: qErr } = await supabase
           .from('questions')
-          .insert({ ...qData, id: undefined, quiz_id: newQuiz.id, created_at: undefined })
+          .insert({ ...qData, quiz_id: newQuiz.id })
           .select()
           .single()
+        if (qErr) throw qErr
+
         if (newQ && answer_options) {
-          await supabase.from('answer_options').insert(
-            answer_options.map(o => ({ ...o, id: undefined, question_id: newQ.id }))
+          const { error: optErr } = await supabase.from('answer_options').insert(
+            answer_options.map(({ id: _oId, ...o }) => ({ ...o, question_id: newQ.id }))
           )
+          if (optErr) throw optErr
         }
       }
     }
@@ -197,11 +200,21 @@ export const quizService = {
   },
 
   // ── Sessions ──────────────────────────────────────────────────────────────────
-  async createSession(quizId: string, adminId: string) {
+  async createSession(quizId: string, adminId: string, opts?: { mode?: 'live' | 'self_paced'; deadline?: string; participantMode?: 'any' | 'registered_only' }) {
     const roomCode = generateRoomCode()
+    const insertData: Record<string, unknown> = {
+      quiz_id: quizId,
+      admin_id: adminId,
+      room_code: roomCode,
+      status: opts?.mode === 'self_paced' ? 'self_paced' : 'waiting',
+      mode: opts?.mode ?? 'live',
+      participant_mode: opts?.participantMode ?? 'any',
+      current_question_index: 0,
+    }
+    if (opts?.deadline) insertData.deadline = opts.deadline
     const { data, error } = await supabase
       .from('quiz_sessions')
-      .insert({ quiz_id: quizId, admin_id: adminId, room_code: roomCode, status: 'waiting', current_question_index: 0 })
+      .insert(insertData)
       .select('*, quiz:quizzes(*)')
       .single()
     if (error) throw error
@@ -213,7 +226,7 @@ export const quizService = {
       .from('quiz_sessions')
       .select('*, quiz:quizzes(*, questions(count))')
       .eq('room_code', code.toUpperCase())
-      .in('status', ['waiting', 'active'])
+      .in('status', ['waiting', 'active', 'self_paced'])
       .single()
     if (error) throw error
     return data
@@ -274,8 +287,29 @@ export const quizService = {
     if (responses.length === 0) return
     const { error } = await supabase
       .from('custom_field_responses')
-      .upsert(responses.map(r => ({ ...r, participant_id: participantId })))
+      .upsert(
+        responses.map(r => ({ ...r, participant_id: participantId })),
+        { onConflict: 'participant_id,field_id' }
+      )
     if (error) throw error
+  },
+
+  async resetParticipantProgress(participantId: string) {
+    const { error } = await supabase
+      .from('session_participants')
+      .update({
+        score: 0,
+        correct_answers: 0,
+        wrong_answers: 0,
+        streak: 0,
+        student_question_index: 0,
+        is_finished: false,
+        finished_at: null
+      })
+      .eq('id', participantId)
+    if (error) throw error
+
+    await supabase.from('participant_answers').delete().eq('participant_id', participantId)
   },
 
   async submitAnswer(participantId: string, sessionId: string, questionId: string, selectedOptionIds: string[], textAnswer: string, timeTaken: number, isCorrect: boolean, pointsEarned: number) {
@@ -291,7 +325,7 @@ export const quizService = {
         is_correct: isCorrect,
         points_earned: pointsEarned,
         answered_at: new Date().toISOString(),
-      })
+      }, { onConflict: 'participant_id,question_id' })
     if (error) throw error
 
     // Update participant score via RPC
@@ -311,6 +345,149 @@ export const quizService = {
       .limit(20)
     if (error) throw error
     return (data ?? []).map((p, i) => ({ ...p, rank: i + 1 }))
+  },
+
+  // ── Self-Paced Mode ───────────────────────────────────────────────────────────
+
+  async advanceStudentQuestion(participantId: string, index: number) {
+    const { error } = await supabase
+      .from('session_participants')
+      .update({ student_question_index: index })
+      .eq('id', participantId)
+    if (error) throw error
+  },
+
+  async finishStudentSession(participantId: string) {
+    const { data: part } = await supabase
+      .from('session_participants')
+      .select('student_id, score')
+      .eq('id', participantId)
+      .single()
+
+    const { error } = await supabase
+      .from('session_participants')
+      .update({ is_finished: true, finished_at: new Date().toISOString() })
+      .eq('id', participantId)
+    if (error) throw error
+
+    if (part?.student_id) {
+      if (part.score > 0) {
+        await supabase.rpc('add_xp', { user_id_arg: part.student_id, xp_arg: part.score })
+      }
+      try {
+        const { studentService } = await import('./student.service')
+        await studentService.checkAndAwardAchievements(part.student_id)
+      } catch (err) {
+        console.error('Failed to award achievements:', err)
+      }
+    }
+  },
+
+  // Get open self-paced sessions for a given admin (to show on student dashboard)
+  async getOpenSelfPacedSessions() {
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from('quiz_sessions')
+      .select('*, quiz:quizzes(title, thumbnail_url, theme, question_count)')
+      .eq('status', 'self_paced')
+      .or(`deadline.is.null,deadline.gt.${now}`)
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    return data ?? []
+  },
+
+  // Check if the student already has a participant record for a session
+  async getStudentParticipant(sessionId: string, studentId: string) {
+    const { data } = await supabase
+      .from('session_participants')
+      .select('*')
+      .eq('session_id', sessionId)
+      .eq('student_id', studentId)
+      .single()
+    return data ?? null
+  },
+
+  // Check if the student has completed ANY session for a given quiz
+  async hasStudentCompletedQuiz(quizId: string, studentId: string) {
+    const { data } = await supabase
+      .from('session_participants')
+      .select('id, is_finished, session:quiz_sessions!inner(id, quiz_id)')
+      .eq('student_id', studentId)
+      .eq('session.quiz_id', quizId)
+      .eq('is_finished', true)
+      .limit(1)
+    return data && data.length > 0
+  },
+
+  // ── Cross-Session All-Time Leaderboard ─────────────────────────────────────
+  // Aggregates scores for registered (non-guest) students across all admin sessions.
+  // Guest emails always start with 'guest_', so we exclude them.
+  async getCrossSessionLeaderboard(adminId: string, dateFrom?: string, dateTo?: string) {
+    let query = supabase
+      .from('session_participants')
+      .select(`
+        student_id,
+        score,
+        correct_answers,
+        wrong_answers,
+        session_id,
+        profile:profiles!session_participants_student_id_fkey(id, display_name, avatar_seed, email),
+        session:quiz_sessions!session_participants_session_id_fkey(admin_id, created_at, quiz:quizzes(title))
+      `)
+
+    const { data, error } = await query
+    if (error) throw error
+    if (!data) return []
+
+    // Filter: only this admin's sessions, only registered students (non-guest email)
+    const filtered = (data as any[]).filter(row => {
+      const isAdminSession = row.session?.admin_id === adminId
+      const isRegistered = row.profile?.email && !row.profile.email.startsWith('guest_')
+      if (!isAdminSession || !isRegistered) return false
+      if (dateFrom && row.session?.created_at < dateFrom) return false
+      if (dateTo && row.session?.created_at > dateTo) return false
+      return true
+    })
+
+    // Aggregate by student_id
+    const map = new Map<string, {
+      student_id: string
+      display_name: string
+      avatar_seed: string
+      sessions: number
+      total_score: number
+      best_score: number
+      total_correct: number
+      total_wrong: number
+    }>()
+
+    for (const row of filtered) {
+      const id = row.student_id
+      if (!map.has(id)) {
+        map.set(id, {
+          student_id: id,
+          display_name: row.profile?.display_name ?? 'Unknown',
+          avatar_seed: row.profile?.avatar_seed ?? 'default',
+          sessions: 0,
+          total_score: 0,
+          best_score: 0,
+          total_correct: 0,
+          total_wrong: 0,
+        })
+      }
+      const entry = map.get(id)!
+      entry.sessions += 1
+      entry.total_score += row.score ?? 0
+      entry.best_score = Math.max(entry.best_score, row.score ?? 0)
+      entry.total_correct += row.correct_answers ?? 0
+      entry.total_wrong += row.wrong_answers ?? 0
+    }
+
+    return Array.from(map.values())
+      .sort((a, b) => b.total_score - a.total_score)
+      .map((entry, i) => ({ ...entry, rank: i + 1,
+        avg_score: entry.sessions > 0 ? Math.round(entry.total_score / entry.sessions) : 0
+      }))
   },
 
   async getAdminSessions(adminId: string) {

@@ -48,7 +48,7 @@ export default function QuizzesPage() {
         enable_music: false,
         enable_animations: true,
         auto_submit: true,
-        allow_retakes: true,
+        allow_retakes: false,
         max_attempts: 3,
       })
       navigate(`/admin/quizzes/${quiz.id}/edit`)
@@ -70,7 +70,10 @@ export default function QuizzesPage() {
       const copy = await quizService.duplicateQuiz(quiz.id, profile.id)
       setQuizzes(q => [copy, ...q])
       toast.success('Quiz duplicated!')
-    } catch { toast.error('Duplicate failed') }
+    } catch (err) {
+      console.error('Duplication error:', err)
+      toast.error('Duplicate failed')
+    }
     setMenuOpen(null)
   }
 
@@ -148,7 +151,7 @@ export default function QuizzesPage() {
                               initial={{ opacity: 0, scale: 0.9, y: -8 }}
                               animate={{ opacity: 1, scale: 1, y: 0 }}
                               exit={{ opacity: 0, scale: 0.9 }}
-                              className="absolute right-0 top-8 z-20 glass-strong rounded-xl shadow-xl min-w-44 py-1 border border-theme"
+                              className="absolute right-0 top-8 z-30 bg-[var(--color-bg-secondary)] rounded-xl shadow-xl min-w-44 py-1 border border-theme"
                               onClick={e => e.stopPropagation()}
                             >
                               {[

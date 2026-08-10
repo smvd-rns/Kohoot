@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Link } from 'react-router-dom'
-import { Zap, BookOpen, Trophy, Target, Plus } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Zap, BookOpen, Trophy, Target, Plus, Clock, ChevronRight, AlertTriangle } from 'lucide-react'
 import { Card, StatCard, Avatar, Button, Badge, EmptyState } from '@/components/ui'
 import { useAuthStore } from '@/store/authStore'
 import { studentService } from '@/services/student.service'
@@ -10,6 +10,7 @@ import { timeAgo, getTheme, xpForLevel } from '@/lib/utils'
 
 export default function StudentDashboard() {
   const { profile } = useAuthStore()
+  const navigate = useNavigate()
   const [stats, setStats] = useState({ totalQuizzes: 0, avgScore: 0, totalCorrect: 0, bestScore: 0 })
   const [history, setHistory] = useState<unknown[]>([])
 
@@ -18,11 +19,27 @@ export default function StudentDashboard() {
     Promise.all([
       studentService.getStudentStats(profile.id),
       quizService.getStudentHistory(profile.id),
-    ]).then(([s, h]) => { setStats(s); setHistory(h.slice(0, 5)) })
+    ]).then(([s, h]) => {
+      setStats(s)
+      setHistory(h.slice(0, 5))
+    })
   }, [profile?.id])
 
-  const xpNeeded = xpForLevel(profile?.level ?? 1)
-  const xpProgress = ((profile?.xp ?? 0) % xpNeeded)
+  const getXpProgress = (xp: number, level: number) => {
+    let totalXpForCurrentLevel = 0
+    for (let l = 1; l < level; l++) {
+      totalXpForCurrentLevel += xpForLevel(l)
+    }
+    const currentXpInLevel = xp - totalXpForCurrentLevel
+    const needed = xpForLevel(level)
+    return {
+      current: currentXpInLevel,
+      needed,
+      percent: Math.min(100, Math.max(0, (currentXpInLevel / needed) * 100))
+    }
+  }
+
+  const { current: currentXp, needed: xpNeeded, percent: progressPercent } = getXpProgress(profile?.xp ?? 0, profile?.level ?? 1)
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
@@ -37,10 +54,10 @@ export default function StudentDashboard() {
             <div className="mt-3 max-w-xs">
               <div className="flex justify-between text-xs text-theme-secondary mb-1">
                 <span>XP Progress</span>
-                <span>{profile?.xp ?? 0} / {xpNeeded}</span>
+                <span>{currentXp} / {xpNeeded}</span>
               </div>
               <div className="h-2 rounded-full glass overflow-hidden">
-                <motion.div className="h-2 rounded-full bg-gradient-brand" initial={{ width: 0 }} animate={{ width: `${Math.min(100, (xpProgress / xpNeeded) * 100)}%` }} transition={{ duration: 1, ease: 'easeOut' }} />
+                <motion.div className="h-2 rounded-full bg-gradient-brand" initial={{ width: 0 }} animate={{ width: `${progressPercent}%` }} transition={{ duration: 1, ease: 'easeOut' }} />
               </div>
             </div>
           </div>
@@ -53,10 +70,11 @@ export default function StudentDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={<BookOpen className="w-6 h-6" style={{ color: '#7c6fef' }} />} label="Quizzes Taken"  value={stats.totalQuizzes} color="rgba(124,111,239,0.15)" />
-        <StatCard icon={<Target   className="w-6 h-6" style={{ color: '#f928b8' }} />} label="Avg Score"     value={`${stats.avgScore}pts`} color="rgba(249,40,184,0.15)" />
+        <StatCard icon={<Target   className="w-6 h-6" style={{ color: '#f928b8' }} />} label="Avg Score"     value={`${stats.avgScore} pts`} color="rgba(249,40,184,0.15)" />
         <StatCard icon={<Zap      className="w-6 h-6" style={{ color: '#22c55e' }} />} label="Correct Answers" value={stats.totalCorrect} color="rgba(34,197,94,0.15)" />
-        <StatCard icon={<Trophy   className="w-6 h-6" style={{ color: '#ffd700' }} />} label="Best Score"    value={`${stats.bestScore}pts`} color="rgba(255,215,0,0.15)" />
+        <StatCard icon={<Trophy   className="w-6 h-6" style={{ color: '#ffd700' }} />} label="Best Score"    value={`${stats.bestScore} pts`} color="rgba(255,215,0,0.15)" />
       </div>
+
 
       {/* Recent history */}
       <Card padding="none">

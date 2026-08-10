@@ -109,22 +109,30 @@ export default function QuizPlayPage() {
   const [loading, setLoading] = useState(true)
   const [participantId, setParticipantId] = useState<string>('')
   const [musicUrl, setMusicUrl] = useState('')
-  const [isMuted, setIsMuted] = useState(false)
+  const [isMuted, setIsMuted] = useState(true)   // start muted — browsers block autoplay without user gesture
+  const [showSoundBanner, setShowSoundBanner] = useState(true) // prompt user to enable sound
   const answerStartTime = useRef(Date.now())
   const audioRef = useRef<HTMLAudioElement>(null)
 
-  // Sync audio state directly to the DOM node to bypass React race conditions
+  // Sync audio mute state to DOM element
   useEffect(() => {
     if (audioRef.current) {
-      audioRef.current.muted = isMuted;
+      audioRef.current.muted = isMuted
       if (!isMuted && musicUrl) {
-        audioRef.current.play().catch((err) => {
-          console.warn('Autoplay blocked, muting audio:', err);
-          setIsMuted(true);
-        });
+        audioRef.current.play().catch(() => {})
       }
     }
-  }, [isMuted, musicUrl]);
+  }, [isMuted, musicUrl])
+
+  // Unlock & play audio when user enables sound
+  const enableSound = () => {
+    setShowSoundBanner(false)
+    setIsMuted(false)
+    if (audioRef.current) {
+      audioRef.current.muted = false
+      audioRef.current.play().catch(() => {})
+    }
+  }
 
   const loadQuiz = useCallback(async () => {
     if (!sessionId || !profile) return
@@ -259,11 +267,42 @@ export default function QuizPlayPage() {
     <div className="fixed inset-0 flex flex-col" style={{ background: 'linear-gradient(135deg, var(--color-bg-primary), var(--color-bg-secondary))' }}>
       {musicUrl && <audio key={musicUrl} ref={audioRef} src={musicUrl} autoPlay loop muted={isMuted} />}
 
-      {/* Music controls for Student */}
+      {/* === Sound enable banner === */}
+      {showSoundBanner && musicUrl && (
+        <motion.div
+          initial={{ y: -80, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -80, opacity: 0 }}
+          className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-3 px-4 py-3"
+          style={{ background: 'linear-gradient(90deg, #7c6fef, #f928b8)' }}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🎵</span>
+            <span className="text-white text-sm font-semibold">Music is ready — tap to enable sound</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={enableSound}
+              className="bg-white text-brand-600 text-xs font-black px-4 py-1.5 rounded-full hover:scale-105 transition-transform"
+            >
+              🔊 Enable Sound
+            </button>
+            <button
+              onClick={() => setShowSoundBanner(false)}
+              className="text-white/70 hover:text-white text-xs px-2"
+            >
+              ✕ No thanks
+            </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Music mute toggle */}
       <div className="absolute top-4 right-4 z-50">
         <button onClick={() => {
           const nextMuted = !isMuted
           setIsMuted(nextMuted)
+          setShowSoundBanner(false)
           if (audioRef.current) audioRef.current.play().catch(console.error)
         }} className="p-2 glass rounded-full hover:bg-white/10 transition-colors shadow-lg">
           {isMuted ? <span className="text-red-400">🔇</span> : <span className="text-green-400">🔊</span>}

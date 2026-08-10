@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { motion } from 'framer-motion'
-import { Mail, Lock, User, Eye, EyeOff, GraduationCap, Shield } from 'lucide-react'
+import { Mail, Lock, User, Eye, EyeOff, GraduationCap, Shield, Phone } from 'lucide-react'
 import { Button, Input, Card } from '@/components/ui'
 import { useAuthStore } from '@/store/authStore'
 import { authService } from '@/services/auth.service'
@@ -13,8 +13,9 @@ import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types'
 
 const schema = z.object({
-  display_name: z.string().min(2, 'Name must be at least 2 characters'),
-  username:     z.string().min(3, 'Username must be at least 3 characters').regex(/^[a-z0-9_]+$/, 'Only lowercase letters, numbers, underscores'),
+  firstName:    z.string().min(1, 'First name is required'),
+  lastName:     z.string().min(1, 'Last name is required'),
+  phone:        z.string().optional(),
   email:        z.string().email('Enter a valid email'),
   password:     z.string().min(6, 'Password must be at least 6 characters'),
   confirmPw:    z.string(),
@@ -31,6 +32,7 @@ const roles = [
 export default function RegisterPage() {
   const [showPw, setShowPw] = useState(false)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const profile = useAuthStore(s => s.profile)
   const setProfile = useAuthStore(s => s.setProfile)
 
@@ -43,13 +45,33 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (profile) {
-      navigate(profile.role === 'admin' ? '/admin' : '/student', { replace: true })
+      const redirectUrl = searchParams.get('redirect')
+      navigate(redirectUrl || (profile.role === 'admin' ? '/admin' : '/student'), { replace: true })
     }
-  }, [profile, navigate])
+  }, [profile, navigate, searchParams])
 
   const onSubmit = async (data: FormData) => {
     try {
-      const profile = await authService.signUp(data)
+      // Auto-generate display_name and DB-safe username
+      const display_name = `${data.firstName.trim()} ${data.lastName.trim()}`
+      
+      // Keep only alphanumeric and underscores, lowercase it, append short random string to avoid duplicate usernames
+      const cleanFirst = data.firstName.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const cleanLast = data.lastName.toLowerCase().replace(/[^a-z0-9]/g, '')
+      const randomSuffix = Math.floor(100 + Math.random() * 900) // 3 digit random number
+      const username = `${cleanFirst}_${cleanLast}_${randomSuffix}`
+
+      const signUpData = {
+        email: data.email,
+        password: data.password,
+        confirmPw: data.confirmPw,
+        role: data.role,
+        display_name,
+        username,
+        phone: data.phone,
+      }
+
+      const profile = await authService.signUp(signUpData as any)
       if (profile.role === 'admin' && !profile.is_approved) {
         await authService.signOut()
         toast.success('Registration request sent! Awaiting Superadmin approval before you can log in.', { duration: 6000 })
@@ -105,19 +127,28 @@ export default function RegisterPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Full Name"
-              placeholder="Your name"
+              label="First Name"
+              placeholder="First name"
               leftIcon={<User className="w-4 h-4" />}
-              error={errors.display_name?.message}
-              {...register('display_name')}
+              error={errors.firstName?.message}
+              {...register('firstName')}
             />
             <Input
-              label="Username"
-              placeholder="yourusername"
-              error={errors.username?.message}
-              {...register('username')}
+              label="Last Name"
+              placeholder="Last name"
+              error={errors.lastName?.message}
+              {...register('lastName')}
             />
           </div>
+
+          <Input
+            label="Mobile Number"
+            type="tel"
+            placeholder="Your phone number"
+            leftIcon={<Phone className="w-4 h-4" />}
+            error={errors.phone?.message}
+            {...register('phone')}
+          />
 
           <Input
             label="Email"

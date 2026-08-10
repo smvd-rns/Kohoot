@@ -3,12 +3,28 @@ import type { Profile } from '@/types'
 
 export const studentService = {
   async listStudents(adminId: string): Promise<Profile[]> {
+    const { data: sessions } = await supabase
+      .from('quiz_sessions')
+      .select('id')
+      .eq('admin_id', adminId)
+
+    if (!sessions || sessions.length === 0) return []
+    const sessionIds = sessions.map(s => s.id)
+
+    const { data: participations } = await supabase
+      .from('session_participants')
+      .select('student_id')
+      .in('session_id', sessionIds)
+
+    if (!participations || participations.length === 0) return []
+    const studentIds = Array.from(new Set(participations.map(p => p.student_id)))
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('role', 'student')
-      .eq('admin_id', adminId)
+      .in('id', studentIds)
       .order('created_at', { ascending: false })
+
     if (error) throw error
     return data ?? []
   },

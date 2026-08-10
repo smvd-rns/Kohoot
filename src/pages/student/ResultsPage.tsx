@@ -21,11 +21,18 @@ export default function ResultsPage() {
   useEffect(() => {
     window.addEventListener('resize', () => setWindowSize({ width: window.innerWidth, height: window.innerHeight }))
     if (!sessionId || !profile) return
-    quizService.getLeaderboard(sessionId).then(lb => {
+    quizService.getLeaderboard(sessionId).then(async (lb) => {
       const entries = lb as unknown as LeaderboardEntry[]
       setLeaderboard(entries)
-      const me = entries.find(e => e.participant_id === profile.id) ?? null
+      const me = (entries as any).find((e: any) => e.student_id === profile.id) ?? null
       setMyResult(me)
+      if (me?.id) {
+        try {
+          await quizService.finishStudentSession(me.id)
+        } catch (err) {
+          console.error('Failed to mark student session as finished:', err)
+        }
+      }
     })
     // Stop confetti after 6s
     const t = setTimeout(() => setShowConfetti(false), 6000)
@@ -113,13 +120,13 @@ export default function ResultsPage() {
         {/* Full leaderboard */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="w-full max-w-md space-y-2 mb-8">
           <h2 className="text-lg font-bold text-white mb-4 text-center">Full Rankings</h2>
-          {leaderboard.map((e, i) => (
-            <div key={e.participant_id} className={cn('flex items-center gap-3 p-3 rounded-xl', e.participant_id === profile?.id ? 'glass-strong border border-brand-500' : 'glass')}>
+          {leaderboard.map((e: any, i) => (
+            <div key={e.id} className={cn('flex items-center gap-3 p-3 rounded-xl', e.student_id === profile?.id ? 'glass-strong border border-brand-500' : 'glass')}>
               <span className="text-lg w-8 text-center font-black text-theme-secondary">{i + 1}</span>
               <Avatar seed={e.avatar_seed} size="sm" />
               <span className="flex-1 font-medium text-white truncate">{e.display_name}</span>
               <span className="font-black text-brand-400">{e.score.toLocaleString()}</span>
-              {e.participant_id === profile?.id && <Star className="w-4 h-4 text-warning-400 flex-shrink-0" />}
+              {e.student_id === profile?.id && <Star className="w-4 h-4 text-warning-400 flex-shrink-0" />}
             </div>
           ))}
         </motion.div>

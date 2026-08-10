@@ -14,6 +14,8 @@ export default function StudentsPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [deleteModal, setDeleteModal] = useState<Profile | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
     if (!profile?.id) return
@@ -72,7 +74,8 @@ export default function StudentsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState icon="👥" title={search ? 'No students found' : 'No students yet'} description={search ? 'Try different search' : 'Students will appear here when they register'} />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-theme">
@@ -82,7 +85,7 @@ export default function StudentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-theme">
-                {filtered.map((s, i) => (
+                {filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((s, i) => (
                   <motion.tr key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }} className="hover:bg-white/3 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
@@ -109,7 +112,56 @@ export default function StudentsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {filtered.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-6 border-t border-theme">
+              <div className="flex items-center gap-2 text-sm text-theme-secondary">
+                <span>Show</span>
+                <select
+                  value={pageSize}
+                  onChange={e => {
+                    setPageSize(Number(e.target.value))
+                    setCurrentPage(1)
+                  }}
+                  className="bg-white/5 border border-theme rounded-lg px-2 py-1 text-theme-primary focus:outline-none focus:ring-1 focus:ring-brand-500"
+                >
+                  {[10, 30, 50].map(size => (
+                    <option key={size} value={size} className="bg-neutral-900 text-white">
+                      {size}
+                    </option>
+                  ))}
+                </select>
+                <span>entries per page</span>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-theme-secondary">
+                  Page <strong>{currentPage}</strong> of <strong>{Math.ceil(filtered.length / pageSize) || 1}</strong> ({filtered.length} entries)
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(filtered.length / pageSize), p + 1))}
+                    disabled={currentPage === Math.ceil(filtered.length / pageSize) || Math.ceil(filtered.length / pageSize) === 0}
+                  >
+                    Next
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
+      </>
+    )}
       </Card>
 
       <Modal open={!!deleteModal} onClose={() => setDeleteModal(null)} title="Remove Student">
