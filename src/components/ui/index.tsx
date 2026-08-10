@@ -340,7 +340,7 @@ export function Modal({ open, onClose, title, children, size = 'md', hideClose }
     >
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <motion.div
-        className={cn('relative w-full glass-strong rounded-3xl overflow-hidden', sizes[size])}
+        className={cn('relative w-full bg-[var(--color-bg-secondary)] border border-theme rounded-3xl overflow-hidden shadow-2xl', sizes[size])}
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.9, y: 20 }}
