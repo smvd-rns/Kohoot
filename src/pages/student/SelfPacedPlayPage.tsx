@@ -200,7 +200,14 @@ export default function SelfPacedPlayPage() {
     setPointsEarned(earned)
     if (correct) setScore(s => s + earned)
 
-    await quizService.submitAnswer(participantId, sessionId!, currentQ.id, sel, '', timeTaken, correct, earned)
+    try {
+      await quizService.submitAnswer(participantId, sessionId!, currentQ.id, sel, '', timeTaken, correct, earned)
+    } catch (err) {
+      console.error('Failed to submit answer:', err)
+      setHasAnswered(false)
+      if (correct) setScore(s => s - earned)
+      toast.error('Network issue: Failed to save your answer. Please click Submit again.')
+    }
   }
 
   const handleAnswer = async (optionId: string) => {

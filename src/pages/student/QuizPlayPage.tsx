@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useQuizStore } from '@/store/quizStore'
 import { cn } from '@/lib/utils'
 import type { Question, AnswerOption, LeaderboardEntry } from '@/types'
+import toast from 'react-hot-toast'
 
 const ANSWER_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
 const ANSWER_ICONS = ['▲', '◆', '●', '★']
@@ -249,7 +250,14 @@ export default function QuizPlayPage() {
     setPointsEarned(earned)
     if (correct) setScore(s => s + earned)
 
-    await quizService.submitAnswer(participantId, sessionId!, currentQ.id, sel, '', timeTaken, correct, earned)
+    try {
+      await quizService.submitAnswer(participantId, sessionId!, currentQ.id, sel, '', timeTaken, correct, earned)
+    } catch (err) {
+      console.error('Failed to submit answer:', err)
+      setHasAnswered(false)
+      if (correct) setScore(s => s - earned)
+      toast.error('Network issue: Failed to save your answer. Please click Submit again.')
+    }
   }
 
   if (loading || !currentQ) {

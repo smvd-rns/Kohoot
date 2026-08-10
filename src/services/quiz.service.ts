@@ -2,6 +2,17 @@ import { supabase } from '@/lib/supabase'
 import type { Quiz, QuizFormData, Question, AnswerOption, CustomField } from '@/types'
 import { generateRoomCode } from '@/lib/utils'
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
+  try {
+    return await fn()
+  } catch (error) {
+    if (retries <= 0) throw error
+    await new Promise(resolve => setTimeout(resolve, delay))
+    return withRetry(fn, retries - 1, delay * 2)
+  }
+}
+
+
 export const quizService = {
   // ── Quizzes ─────────────────────────────────────────────────────────────────
   async listQuizzes(adminId: string, role?: string): Promise<Quiz[]> {
@@ -313,27 +324,31 @@ export const quizService = {
   },
 
   async submitAnswer(participantId: string, sessionId: string, questionId: string, selectedOptionIds: string[], textAnswer: string, timeTaken: number, isCorrect: boolean, pointsEarned: number) {
-    const { error } = await supabase
-      .from('participant_answers')
-      .upsert({
-        participant_id: participantId,
-        session_id: sessionId,
-        question_id: questionId,
-        selected_option_ids: selectedOptionIds,
-        text_answer: textAnswer,
-        time_taken: timeTaken,
-        is_correct: isCorrect,
-        points_earned: pointsEarned,
-        answered_at: new Date().toISOString(),
-      }, { onConflict: 'participant_id,question_id' })
-    if (error) throw error
+    await withRetry(async () => {
+      const { error } = await supabase
+        .from('participant_answers')
+        .upsert({
+          participant_id: participantId,
+          session_id: sessionId,
+          question_id: questionId,
+          selected_option_ids: selectedOptionIds,
+          text_answer: textAnswer,
+          time_taken: timeTaken,
+          is_correct: isCorrect,
+          points_earned: pointsEarned,
+          answered_at: new Date().toISOString(),
+        }, { onConflict: 'participant_id,question_id' })
+      if (error) throw error
 
-    // Update participant score via RPC
-    if (isCorrect) {
-      await supabase.rpc('add_participant_score', { participant_id_arg: participantId, points_arg: pointsEarned })
-    } else {
-      await supabase.rpc('increment_wrong_answers', { participant_id_arg: participantId })
-    }
+      // Update participant score via RPC
+      if (isCorrect) {
+        const { error: rpcErr } = await supabase.rpc('add_participant_score', { participant_id_arg: participantId, points_arg: pointsEarned })
+        if (rpcErr) throw rpcErr
+      } else {
+        const { error: rpcErr } = await supabase.rpc('increment_wrong_answers', { participant_id_arg: participantId })
+        if (rpcErr) throw rpcErr
+      }
+    })
   },
 
   async getLeaderboard(sessionId: string) {
