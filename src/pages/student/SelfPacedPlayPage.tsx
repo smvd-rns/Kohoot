@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, XCircle, ChevronRight, Clock, Zap, AlertTriangle } from 'lucide-react'
+import { CheckCircle, XCircle, ChevronRight, Clock, Zap, AlertTriangle, Volume2, VolumeX } from 'lucide-react'
 import { Button, Avatar, Progress, Spinner } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { quizService } from '@/services/quiz.service'
@@ -118,11 +118,8 @@ export default function SelfPacedPlayPage() {
       }
 
       // Load background music if configured
-      const musicTrack = (session as any).quiz?.background_music
-      if (musicTrack && musicTrack !== 'none') {
-        const { BACKGROUND_MUSIC } = await import('@/lib/music')
-        const track = BACKGROUND_MUSIC.find(t => t.id === musicTrack)
-        if (track?.url) setMusicUrl(track.url)
+      if (session.quiz?.background_music_url) {
+        setMusicUrl(session.quiz.background_music_url)
       }
 
       const qs = await quizService.getQuestions(session.quiz_id)
@@ -149,6 +146,23 @@ export default function SelfPacedPlayPage() {
         setCurrentIdx(startIdx)
         setCurrentQ(qs[startIdx] ?? null)
         setTimeLeft(qs[startIdx]?.time_limit ?? 30)
+
+        // Check if student has already answered the current question to prevent cheating on reload
+        const currentQuestion = qs[startIdx]
+        if (currentQuestion) {
+          const { data: answeredList } = await supabase
+            .from('participant_answers')
+            .select('*')
+            .eq('participant_id', part.id)
+          
+          const existingAnswer = answeredList?.find(ans => ans.question_id === currentQuestion.id)
+          if (existingAnswer) {
+            setHasAnswered(true)
+            setIsCorrect(existingAnswer.is_correct)
+            setPointsEarned(existingAnswer.points_earned)
+            setSelected(existingAnswer.selected_option_ids || [])
+          }
+        }
       }
     } catch (err) {
       toast.error('Failed to load quiz')
@@ -266,60 +280,62 @@ export default function SelfPacedPlayPage() {
 
   return (
     <div className="fixed inset-0 flex flex-col" style={{ background: 'linear-gradient(135deg, var(--color-bg-primary), var(--color-bg-secondary))' }}>
-      {musicUrl && <audio key={musicUrl} ref={audioRef} src={musicUrl} autoPlay loop muted />}
+      {musicUrl && <audio key={musicUrl} ref={audioRef} src={musicUrl} autoPlay loop muted={isMuted} />}
 
       {/* Sound enable banner */}
       {showSoundBanner && musicUrl && (
         <motion.div
-          initial={{ y: -80, opacity: 0 }}
+          initial={{ y: -50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between gap-3 px-4 py-3"
-          style={{ background: 'linear-gradient(90deg, #7c6fef, #f928b8)' }}
+          exit={{ y: -50, opacity: 0 }}
+          className="fixed top-2 left-2 right-2 z-50 rounded-2xl shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border border-white/10"
+          style={{ background: 'linear-gradient(135deg, #7c6fef, #f928b8)' }}
         >
           <div className="flex items-center gap-2">
-            <span className="text-xl">🎵</span>
-            <span className="text-white text-sm font-semibold">Music is ready — tap to enable sound</span>
+            <span className="text-lg">🎵</span>
+            <span className="text-white text-xs sm:text-sm font-semibold text-center sm:text-left">
+              Background music is ready!
+            </span>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-center sm:justify-end">
             <button onClick={enableSound}
-              className="bg-white text-purple-700 text-xs font-black px-4 py-1.5 rounded-full hover:scale-105 transition-transform">
-              🔊 Enable Sound
+              className="bg-white text-purple-700 text-xs font-black px-4 py-1.5 rounded-full hover:scale-105 transition-transform flex items-center gap-1">
+              <Volume2 className="w-3.5 h-3.5" /> Enable Sound
             </button>
-            <button onClick={() => setShowSoundBanner(false)} className="text-white/70 hover:text-white text-xs px-2">✕</button>
+            <button onClick={() => setShowSoundBanner(false)} className="text-white/70 hover:text-white text-xs p-1">✕</button>
           </div>
         </motion.div>
-      )}
-
-      {/* Mute toggle */}
-      {musicUrl && (
-        <div className="absolute top-4 left-4 z-50">
-          <button onClick={() => { setIsMuted(m => !m); setShowSoundBanner(false) }}
-            className="p-2 glass rounded-full hover:bg-white/10 transition-colors">
-            {isMuted ? <span className="text-red-400">🔇</span> : <span className="text-green-400">🔊</span>}
-          </button>
-        </div>
       )}
 
       {/* Score feedback overlay */}
       <AnimatePresence>
         {hasAnswered && (
-          <motion.div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none"
+          <motion.div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm pointer-events-none"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div
-              className={cn('flex flex-col items-center gap-3 p-8 rounded-3xl', isCorrect ? 'bg-success-500/20' : 'bg-danger-500/20')}
-              initial={{ scale: 0, rotate: -10 }} animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
+              className={cn('flex flex-col items-center gap-4 p-8 rounded-3xl border shadow-2xl max-w-xs w-full mx-4 text-center', 
+                isCorrect ? 'bg-[#121c16] border-success-500/30' : 'bg-[#1c1212] border-danger-500/30')}
+              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 25 }}>
               {isCorrect ? (
                 <>
-                  <CheckCircle className="w-16 h-16 text-success-400" />
-                  <p className="text-3xl font-black text-white">+{pointsEarned}</p>
-                  <p className="text-success-400 font-bold">Correct! 🎉</p>
+                  <div className="w-20 h-20 rounded-full bg-success-500/10 flex items-center justify-center text-success-400">
+                    <CheckCircle className="w-12 h-12" />
+                  </div>
+                  <div>
+                    <p className="text-3xl font-black text-white">+{pointsEarned}</p>
+                    <p className="text-success-400 font-bold text-lg mt-1">Correct! 🎉</p>
+                  </div>
                 </>
               ) : (
                 <>
-                  <XCircle className="w-16 h-16 text-danger-400" />
-                  <p className="text-xl font-black text-white">Wrong!</p>
-                  <p className="text-danger-400 font-medium">Better luck next time</p>
+                  <div className="w-20 h-20 rounded-full bg-danger-500/10 flex items-center justify-center text-danger-400">
+                    <XCircle className="w-12 h-12" />
+                  </div>
+                  <div>
+                    <p className="text-xl font-black text-white">Wrong!</p>
+                    <p className="text-danger-400 font-medium mt-1">Better luck next time</p>
+                  </div>
                 </>
               )}
             </motion.div>
@@ -328,33 +344,60 @@ export default function SelfPacedPlayPage() {
       </AnimatePresence>
 
       {/* Header */}
-      <div className="relative z-10 px-4 pt-4">
-        <div className="flex items-center justify-between max-w-2xl mx-auto mb-3">
+      <div className="relative z-10 px-4 pt-3 pb-2 glass-strong border-b border-white/10">
+        <div className="flex items-center justify-between max-w-2xl mx-auto mb-2">
+          {/* Left: Profile & Score */}
           <div className="flex items-center gap-2">
             <Avatar seed={profile?.avatar_seed ?? 'default'} size="sm" />
             <div>
-              <p className="text-xs text-theme-secondary">{profile?.display_name}</p>
-              <p className="text-sm font-black text-white flex items-center gap-1">
-                <Zap className="w-3 h-3 text-warning-400" />{score.toLocaleString()} pts
+              <p className="text-xs text-theme-secondary font-medium leading-none mb-1 max-w-[100px] truncate">{profile?.display_name}</p>
+              <p className="text-sm font-black text-white leading-none flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-warning-400 fill-warning-400" />{score.toLocaleString()} pts
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col items-center gap-1">
-            <p className="text-xs text-theme-secondary">Question</p>
-            <p className="text-sm font-black text-white">{currentIdx + 1} / {questions.length}</p>
-            {deadline && <DeadlineBadge deadline={deadline} />}
+          {/* Right: Controls & Timer */}
+          <div className="flex items-center gap-3">
+            {musicUrl && (
+              <button 
+                onClick={() => {
+                  const nextMuted = !isMuted
+                  setIsMuted(nextMuted)
+                  setShowSoundBanner(false)
+                  if (audioRef.current) {
+                    audioRef.current.muted = nextMuted
+                    if (!nextMuted) {
+                      audioRef.current.play().catch(console.error)
+                    }
+                  }
+                }} 
+                className="p-2 glass rounded-full hover:bg-white/10 transition-colors shadow-md flex items-center justify-center"
+                title={isMuted ? "Unmute Music" : "Mute Music"}
+              >
+                {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4 text-green-400" />}
+              </button>
+            )}
+            <TimerRing seconds={timeLeft} total={currentQ.time_limit} />
           </div>
-
-          <TimerRing seconds={timeLeft} total={currentQ.time_limit} />
         </div>
-        <div className="max-w-2xl mx-auto">
+
+        {/* Sub-header: Question progress & Deadline */}
+        <div className="flex items-center justify-between max-w-2xl mx-auto text-xs border-t border-white/5 pt-2">
+          <div className="text-theme-secondary font-bold">
+            Question <span className="text-white text-sm font-black ml-1">{currentIdx + 1} / {questions.length}</span>
+          </div>
+          {deadline && <DeadlineBadge deadline={deadline} />}
+        </div>
+
+        {/* Progress bar */}
+        <div className="max-w-2xl mx-auto mt-2.5">
           <Progress value={currentIdx + 1} max={questions.length} height={4} />
         </div>
       </div>
 
       {/* Question */}
-      <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 overflow-y-auto">
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-start sm:justify-center px-4 py-6 overflow-y-auto">
         <motion.div key={currentQ.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-2xl">
           {/* Media */}
           {currentQ.media_url && currentQ.media_type === 'image' && (
@@ -371,7 +414,7 @@ export default function SelfPacedPlayPage() {
 
           {/* MC / TF / Multi / Poll options */}
           {['multiple_choice', 'true_false', 'multi_select', 'poll'].includes(currentQ.type) && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {options.map((opt, i) => {
                 const color = ANSWER_COLORS[i % ANSWER_COLORS.length]
                 const isSelected = selected.includes(opt.id)

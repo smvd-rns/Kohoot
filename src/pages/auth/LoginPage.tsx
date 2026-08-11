@@ -127,7 +127,7 @@ export default function LoginPage() {
 
         <div className="mt-6 text-center text-sm text-theme-secondary">
           Don't have an account?{' '}
-          <Link to="/register" className="text-brand-400 font-semibold hover:underline">
+          <Link to={`/register${location.search}`} className="text-brand-400 font-semibold hover:underline">
             Create one
           </Link>
         </div>

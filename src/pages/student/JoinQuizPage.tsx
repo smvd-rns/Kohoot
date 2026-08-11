@@ -295,10 +295,10 @@ export default function JoinQuizPage() {
                       The teacher has configured this session to only allow registered students so all your scores can be tracked. Guests are not allowed.
                     </p>
                     <div className="flex gap-2">
-                      <Button variant="outline" className="flex-1" type="button" onClick={() => navigate(`/login?redirect=${encodeURIComponent(`/student/join?code=${getValues('code')}`)}`)}>
+                      <Button variant="outline" className="flex-1" type="button" onClick={() => navigate(`/login?role=student&redirect=${encodeURIComponent(`/student/join?code=${getValues('code')}`)}`)}>
                         Sign In
                       </Button>
-                      <Button className="flex-1" type="button" onClick={() => navigate(`/register?redirect=${encodeURIComponent(`/student/join?code=${getValues('code')}`)}`)}>
+                      <Button className="flex-1" type="button" onClick={() => navigate(`/register?role=student&redirect=${encodeURIComponent(`/student/join?code=${getValues('code')}`)}`)}>
                         Create Account
                       </Button>
                     </div>
@@ -314,17 +314,17 @@ export default function JoinQuizPage() {
                         {...register('nickname')}
                       />
                     )}
+                    {customFields.map(field => (
+                      <Input
+                        key={field.id}
+                        label={field.label + (field.is_required ? ' *' : '')}
+                        placeholder={field.placeholder ?? ''}
+                        error={errors[field.id]?.message as string}
+                        {...register(field.id)}
+                      />
+                    ))}
                   </>
                 )}
-                {customFields.map(field => (
-                  <Input
-                    key={field.id}
-                    label={field.label + (field.is_required ? ' *' : '')}
-                    placeholder={field.placeholder ?? ''}
-                    error={errors[field.id]?.message as string}
-                    {...register(field.id)}
-                  />
-                ))}
               </motion.div>
             )}
 

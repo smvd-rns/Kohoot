@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -32,9 +32,12 @@ const roles = [
 export default function RegisterPage() {
   const [showPw, setShowPw] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams] = useSearchParams()
   const profile = useAuthStore(s => s.profile)
   const setProfile = useAuthStore(s => s.setProfile)
+
+  const isStudentOnly = searchParams.get('role') === 'student'
 
   const { register, handleSubmit, watch, setValue, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -100,30 +103,32 @@ export default function RegisterPage() {
       <Card>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           {/* Role selector */}
-          <div>
-            <p className="text-sm font-medium text-theme-secondary mb-3">I am a...</p>
-            <div className="grid grid-cols-2 gap-3">
-              {roles.map(r => (
-                <button
-                  key={r.value}
-                  type="button"
-                  onClick={() => setValue('role', r.value)}
-                  className={cn(
-                    'flex flex-col items-center gap-2 p-4 rounded-xl border transition-all text-center',
-                    selectedRole === r.value
-                      ? 'border-brand-500 bg-brand-500/10 text-brand-400'
-                      : 'border-theme bg-transparent text-theme-secondary hover:bg-white/5'
-                  )}
-                >
-                  <r.icon className="w-6 h-6" />
-                  <div>
-                    <p className="text-sm font-semibold">{r.label}</p>
-                    <p className="text-xs opacity-70">{r.desc}</p>
-                  </div>
-                </button>
-              ))}
+          {!isStudentOnly && (
+            <div>
+              <p className="text-sm font-medium text-theme-secondary mb-3">I am a...</p>
+              <div className="grid grid-cols-2 gap-3">
+                {roles.map(r => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() => setValue('role', r.value)}
+                    className={cn(
+                      'flex flex-col items-center gap-2 p-4 rounded-xl border transition-all text-center',
+                      selectedRole === r.value
+                        ? 'border-brand-500 bg-brand-500/10 text-brand-400'
+                        : 'border-theme bg-transparent text-theme-secondary hover:bg-white/5'
+                    )}
+                  >
+                    <r.icon className="w-6 h-6" />
+                    <div>
+                      <p className="text-sm font-semibold">{r.label}</p>
+                      <p className="text-xs opacity-70">{r.desc}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <Input
@@ -190,7 +195,7 @@ export default function RegisterPage() {
 
         <div className="mt-6 text-center text-sm text-theme-secondary">
           Already have an account?{' '}
-          <Link to="/login" className="text-brand-400 font-semibold hover:underline">Sign in</Link>
+          <Link to={`/login${location.search}`} className="text-brand-400 font-semibold hover:underline">Sign in</Link>
         </div>
       </Card>
 
