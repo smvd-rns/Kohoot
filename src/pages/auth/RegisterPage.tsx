@@ -84,8 +84,19 @@ export default function RegisterPage() {
       setProfile(profile)
       toast.success('Account created successfully! Welcome 🎉')
     } catch (err: any) {
-      const msg = err.message || 'Registration failed'
-      toast.error(msg)
+      const msg = err.message || ''
+      const isAlreadyRegistered = msg.toLowerCase().includes('already registered') || 
+                                  msg.toLowerCase().includes('already exists') ||
+                                  msg.toLowerCase().includes('unique constraint')
+      if (isAlreadyRegistered) {
+        toast.error('This email is already registered! Redirecting to Sign In...', { duration: 5000 })
+        const redirectParam = searchParams.get('redirect') ? `&redirect=${encodeURIComponent(searchParams.get('redirect')!)}` : ''
+        setTimeout(() => {
+          navigate(`/login?email=${encodeURIComponent(data.email)}${redirectParam}`)
+        }, 1500)
+      } else {
+        toast.error(msg || 'Registration failed')
+      }
     }
   }
 
