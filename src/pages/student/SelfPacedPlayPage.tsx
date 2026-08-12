@@ -310,7 +310,7 @@ export default function SelfPacedPlayPage() {
       {/* Score feedback overlay */}
       <AnimatePresence>
         {hasAnswered && (
-          <motion.div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm pointer-events-none"
+          <motion.div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div
               className={cn('flex flex-col items-center gap-4 p-8 rounded-3xl border shadow-2xl max-w-xs w-full mx-4 text-center', 
@@ -338,6 +338,10 @@ export default function SelfPacedPlayPage() {
                   </div>
                 </>
               )}
+              
+              <Button className="w-full mt-6" size="lg" rightIcon={<ChevronRight className="w-5 h-5" />} onClick={handleNext}>
+                {currentIdx + 1 >= questions.length ? '🎉 Finish Quiz' : 'Next Question'}
+              </Button>
             </motion.div>
           </motion.div>
         )}
@@ -480,14 +484,6 @@ export default function SelfPacedPlayPage() {
             </motion.div>
           )}
 
-          {/* Next / Finish button */}
-          {hasAnswered && (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="mt-6">
-              <Button className="w-full" size="lg" rightIcon={<ChevronRight className="w-5 h-5" />} onClick={handleNext}>
-                {currentIdx + 1 >= questions.length ? '🎉 Finish Quiz' : 'Next Question'}
-              </Button>
-            </motion.div>
-          )}
         </motion.div>
       </div>
     </div>
