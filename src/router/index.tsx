@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, useLocation } from 'react-router-dom'
+import { createBrowserRouter, Navigate, useLocation, useRouteError } from 'react-router-dom'
 import { lazy, Suspense } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { Spinner } from '@/components/ui'
@@ -88,21 +88,47 @@ function PublicOnly({ children }: { children: React.ReactNode }) {
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>
 }
 
+// ── Error Boundary ────────────────────────────────────────────────────────────
+function RootErrorBoundary() {
+  const error = useRouteError() as Error
+  // If chunk loading failed (e.g. after a new deployment), reload the page to get the new assets
+  if (error?.message?.includes('Failed to fetch dynamically imported module') || error?.name === 'TypeError' || error?.message?.includes('Importing a module script failed')) {
+    if (!sessionStorage.getItem('chunk_failed_reload')) {
+      sessionStorage.setItem('chunk_failed_reload', 'true')
+      window.location.reload()
+      return null
+    }
+  }
+  // Clear the flag on successful load/other error
+  sessionStorage.removeItem('chunk_failed_reload')
+  
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center" style={{ background: 'var(--color-bg-primary)' }}>
+      <h1 className="text-3xl font-black mb-4 text-theme-primary">Oops! Something went wrong.</h1>
+      <p className="text-theme-secondary mb-6">{error?.message || 'An unexpected error occurred.'}</p>
+      <button onClick={() => window.location.href = '/'} className="px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold transition-all">Go to Homepage</button>
+    </div>
+  )
+}
+
 // ── Router ────────────────────────────────────────────────────────────────────
 export const router = createBrowserRouter([
   // Public
   {
     path: '/',
     element: <Suspense fallback={<PageLoader />}><LandingPage /></Suspense>,
+    errorElement: <RootErrorBoundary />
   },
   {
     path: '/student/join',
     element: <Suspense fallback={<PageLoader />}><JoinQuizPage /></Suspense>,
+    errorElement: <RootErrorBoundary />
   },
 
   // Auth routes
   {
     element: <AuthLayout />,
+    errorElement: <RootErrorBoundary />,
     children: [
       {
         path: '/login',
@@ -118,6 +144,7 @@ export const router = createBrowserRouter([
   // Admin routes
   {
     path: '/admin',
+    errorElement: <RootErrorBoundary />,
     element: (
       <AuthGuardWrapper roles={['admin', 'super_admin']}>
         <AdminLayout />
@@ -140,6 +167,7 @@ export const router = createBrowserRouter([
   // Super admin routes
   {
     path: '/superadmin',
+    errorElement: <RootErrorBoundary />,
     element: (
       <AuthGuardWrapper roles={['super_admin']}>
         <AdminLayout />
@@ -156,6 +184,7 @@ export const router = createBrowserRouter([
   // Student routes
   {
     path: '/student',
+    errorElement: <RootErrorBoundary />,
     element: (
       <AuthGuardWrapper roles={['student']}>
         <StudentLayout />
@@ -172,6 +201,7 @@ export const router = createBrowserRouter([
   // Full-screen quiz flow (no sidebar)
   {
     path: '/admin/sessions/:sessionId/host',
+    errorElement: <RootErrorBoundary />,
     element: (
       <AuthGuardWrapper roles={['admin', 'super_admin']}>
         <Suspense fallback={<PageLoader />}><HostSessionPage /></Suspense>
@@ -180,6 +210,7 @@ export const router = createBrowserRouter([
   },
   {
     path: '/quiz/lobby/:sessionId',
+    errorElement: <RootErrorBoundary />,
     element: (
       <AuthGuardWrapper roles={['student']}>
         <Suspense fallback={<PageLoader />}><QuizLobbyPage /></Suspense>
@@ -188,6 +219,7 @@ export const router = createBrowserRouter([
   },
   {
     path: '/quiz/play/:sessionId',
+    errorElement: <RootErrorBoundary />,
     element: (
       <AuthGuardWrapper roles={['student']}>
         <Suspense fallback={<PageLoader />}><QuizPlayPage /></Suspense>
@@ -196,6 +228,7 @@ export const router = createBrowserRouter([
   },
   {
     path: '/quiz/results/:sessionId',
+    errorElement: <RootErrorBoundary />,
     element: (
       <AuthGuardWrapper roles={['student']}>
         <Suspense fallback={<PageLoader />}><ResultsPage /></Suspense>
@@ -205,6 +238,7 @@ export const router = createBrowserRouter([
 
   {
     path: '/admin/sessions/:sessionId/self-paced',
+    errorElement: <RootErrorBoundary />,
     element: (
       <AuthGuardWrapper roles={['admin', 'super_admin']}>
         <Suspense fallback={<PageLoader />}><SelfPacedManagePage /></Suspense>
@@ -213,6 +247,7 @@ export const router = createBrowserRouter([
   },
   {
     path: '/quiz/self-paced/:sessionId',
+    errorElement: <RootErrorBoundary />,
     element: (
       <AuthGuardWrapper roles={['student']}>
         <Suspense fallback={<PageLoader />}><SelfPacedPlayPage /></Suspense>

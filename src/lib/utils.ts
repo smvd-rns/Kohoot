@@ -91,17 +91,14 @@ export function applyTheme(theme: QuizTheme): void {
   document.documentElement.setAttribute('data-theme', theme)
 }
 
-// ── Question type labels ──────────────────────────────────────────────────────
 export const QUESTION_TYPE_LABELS: Record<string, string> = {
   multiple_choice: 'Multiple Choice',
   true_false:      'True / False',
   multi_select:    'Multi Select',
   fill_blank:      'Fill in the Blank',
   image_based:     'Image Question',
-  audio_based:     'Audio Question',
   video_based:     'Video Question',
   poll:            'Poll',
-  puzzle:          'Puzzle / Arrange',
   open_ended:      'Open Ended',
 }
 
@@ -156,4 +153,47 @@ export function exportToCSV(data: Record<string, unknown>[], filename: string): 
   link.download = `${filename}.csv`
   link.click()
   URL.revokeObjectURL(url)
+}
+
+// ── Media Embeds ──────────────────────────────────────────────────────────────
+export function getEmbedUrl(url: string | undefined): string | null {
+  if (!url) return null
+  
+  // Extract video ID for YouTube
+  const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i
+  const ytMatch = url.match(youtubeRegex)
+  if (ytMatch && ytMatch[1]) {
+    // Check for start time (t= or start=)
+    const timeMatch = url.match(/[?&](?:t|start)=([^&]+)/i)
+    let timeParam = ''
+    if (timeMatch && timeMatch[1]) {
+      // YouTube embed start is in seconds.
+      let timeStr = timeMatch[1]
+      // if it has 'h', 'm', 's' parse it, else assume seconds
+      let seconds = 0
+      if (timeStr.includes('h') || timeStr.includes('m') || timeStr.includes('s')) {
+        const hMatch = timeStr.match(/(\d+)h/i)
+        const mMatch = timeStr.match(/(\d+)m/i)
+        const sMatch = timeStr.match(/(\d+)s/i)
+        if (hMatch) seconds += parseInt(hMatch[1]) * 3600
+        if (mMatch) seconds += parseInt(mMatch[1]) * 60
+        if (sMatch) seconds += parseInt(sMatch[1])
+      } else {
+        seconds = parseInt(timeStr) || 0
+      }
+      if (seconds > 0) {
+        timeParam = `?start=${seconds}`
+      }
+    }
+    return `https://www.youtube-nocookie.com/embed/${ytMatch[1]}${timeParam}`
+  }
+
+  // Extract video ID for Vimeo
+  const vimeoRegex = /(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/i
+  const vimeoMatch = url.match(vimeoRegex)
+  if (vimeoMatch && vimeoMatch[1]) {
+    return `https://player.vimeo.com/video/${vimeoMatch[1]}`
+  }
+
+  return url
 }

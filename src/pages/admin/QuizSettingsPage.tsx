@@ -97,6 +97,26 @@ export default function QuizSettingsPage() {
       <Card>
         <h2 className="text-lg font-bold text-theme-primary mb-6 flex items-center gap-2"><Settings className="w-5 h-5 text-brand-400" /> General</h2>
         <div className="space-y-5">
+          <div>
+            <label className="text-sm font-medium text-theme-secondary mb-1 block">Quiz Title</label>
+            <input
+              type="text"
+              value={quiz?.title ?? ''}
+              onChange={e => update('title', e.target.value)}
+              className="input-field font-bold"
+              placeholder="Enter quiz title..."
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-theme-secondary mb-1 block">Quiz Description</label>
+            <textarea
+              value={quiz?.description ?? ''}
+              onChange={e => update('description', e.target.value)}
+              className="input-field min-h-[80px]"
+              placeholder="Enter quiz description..."
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-sm font-medium text-theme-secondary mb-1 block">Time per question (sec)</label>

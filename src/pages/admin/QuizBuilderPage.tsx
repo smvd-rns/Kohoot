@@ -6,12 +6,12 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from '@dnd-kit/utilities'
 import {
   Plus, Save, ArrowLeft, Trash2, GripVertical, ChevronRight,
-  Image, Mic, Video, CheckSquare, Type, ToggleLeft, BarChart2,
-  Puzzle, MessageSquare, Settings, Eye,
+  Image, Video, CheckSquare, Type, ToggleLeft, BarChart2,
+  MessageSquare, Settings, Eye, Edit2,
 } from 'lucide-react'
 import { Button, Input, Textarea, Select, Toggle, Card, Badge, Spinner } from '@/components/ui'
 import { quizService } from '@/services/quiz.service'
-import { QUESTION_TYPE_LABELS, cn } from '@/lib/utils'
+import { QUESTION_TYPE_LABELS, cn, getEmbedUrl } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import type { Quiz, Question, AnswerOption, QuestionType } from '@/types'
 
@@ -22,10 +22,8 @@ const qTypeIcons: Record<QuestionType, React.ElementType> = {
   multi_select:    CheckSquare,
   fill_blank:      Type,
   image_based:     Image,
-  audio_based:     Mic,
   video_based:     Video,
   poll:            BarChart2,
-  puzzle:          Puzzle,
   open_ended:      MessageSquare,
 }
 
@@ -35,10 +33,8 @@ const qTypeColors: Record<QuestionType, string> = {
   multi_select:    '#6366f1',
   fill_blank:      '#f97316',
   image_based:     '#ec4899',
-  audio_based:     '#8b5cf6',
   video_based:     '#ef4444',
   poll:            '#eab308',
-  puzzle:          '#06b6d4',
   open_ended:      '#64748b',
 }
 
@@ -132,7 +128,7 @@ function QuestionEditor({ question, onUpdate, onSaveOptions }: { question: Quest
       : [{ text: '', is_correct: true, order_index: 0 }, { text: '', is_correct: false, order_index: 1 }, { text: '', is_correct: false, order_index: 2 }, { text: '', is_correct: false, order_index: 3 }]
   )
 
-  const needsOptions = ['multiple_choice', 'true_false', 'multi_select', 'poll'].includes(question.type)
+  const needsOptions = ['multiple_choice', 'true_false', 'multi_select', 'poll', 'image_based', 'video_based'].includes(question.type)
   const isTrueFalse  = question.type === 'true_false'
 
   useEffect(() => {
@@ -161,13 +157,33 @@ function QuestionEditor({ question, onUpdate, onSaveOptions }: { question: Quest
       />
 
       {/* Media URL */}
-      {['image_based', 'audio_based', 'video_based'].includes(question.type) && (
-        <Input
-          label={`${question.type === 'image_based' ? 'Image' : question.type === 'audio_based' ? 'Audio' : 'Video'} URL`}
-          value={question.media_url ?? ''}
-          onChange={e => onUpdate({ media_url: e.target.value })}
-          placeholder="https://..."
-        />
+      {['image_based', 'video_based'].includes(question.type) && (
+        <div className="space-y-4">
+          <Input
+            label={`${question.type === 'image_based' ? 'Image' : 'Video'} URL`}
+            value={question.media_url ?? ''}
+            onChange={e => {
+              const url = e.target.value;
+              onUpdate({ media_url: url, media_type: question.type === 'image_based' ? 'image' : 'video' })
+            }}
+            placeholder={question.type === 'video_based' ? 'Paste YouTube, Vimeo, or MP4 URL...' : 'Paste image URL...'}
+          />
+          {question.media_url && (
+            <div className="mt-2 rounded-xl overflow-hidden glass border border-theme bg-black/10 flex items-center justify-center p-2 h-48 relative">
+              {question.type === 'image_based' ? (
+                <img src={question.media_url} alt="Preview" className="max-h-full object-contain" />
+              ) : (
+                <iframe
+                  src={getEmbedUrl(question.media_url) || question.media_url}
+                  className="w-full h-full rounded-lg"
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Fill blank answer */}
@@ -180,28 +196,7 @@ function QuestionEditor({ question, onUpdate, onSaveOptions }: { question: Quest
         />
       )}
 
-      {/* Puzzle items */}
-      {question.type === 'puzzle' && (
-        <div>
-          <p className="text-sm font-medium text-theme-secondary mb-2">Items to arrange (in correct order)</p>
-          {(question.puzzle_items ?? ['', '', '']).map((item, i) => (
-            <Input
-              key={i}
-              value={item}
-              onChange={e => {
-                const items = [...(question.puzzle_items ?? [])]
-                items[i] = e.target.value
-                onUpdate({ puzzle_items: items })
-              }}
-              placeholder={`Item ${i + 1}`}
-              className="mb-2"
-            />
-          ))}
-          <button type="button" className="text-xs text-brand-400 hover:underline" onClick={() => onUpdate({ puzzle_items: [...(question.puzzle_items ?? []), ''] })}>
-            + Add item
-          </button>
-        </div>
-      )}
+
 
       {/* Options */}
       {needsOptions && !isTrueFalse && (
@@ -378,6 +373,16 @@ export default function QuizBuilderPage() {
     } catch { toast.error('Save failed') } finally { setSaving(false) }
   }
 
+  const handleUpdateQuizField = async (key: keyof Quiz, value: any) => {
+    if (!quiz) return
+    setQuiz(q => q ? { ...q, [key]: value } : q)
+    try {
+      await quizService.updateQuiz(quiz.id, { [key]: value })
+    } catch {
+      toast.error('Failed to auto-save')
+    }
+  }
+
   if (loading) {
     return <div className="flex justify-center py-32"><Spinner size="lg" /></div>
   }
@@ -386,22 +391,8 @@ export default function QuizBuilderPage() {
     <div className="flex h-[calc(100vh-5rem)] -mx-4 lg:-mx-6 overflow-hidden">
       {/* ── Left panel: question list ─────────────────────────────────────── */}
       <div className="w-72 flex-shrink-0 flex flex-col glass border-r border-theme">
-        {/* Quiz title header */}
+        {/* Tabs header */}
         <div className="p-4 border-b border-theme">
-          <div className="flex items-center gap-2 mb-3">
-            <button onClick={() => navigate('/admin/quizzes')} className="p-1.5 rounded-lg hover:bg-white/10 text-theme-secondary">
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div className="flex-1 min-w-0">
-              <input
-                value={quiz?.title ?? ''}
-                onChange={e => setQuiz(q => q ? { ...q, title: e.target.value } : q)}
-                className="w-full bg-transparent text-sm font-bold text-theme-primary outline-none truncate"
-                placeholder="Quiz title..."
-              />
-            </div>
-          </div>
-          {/* Tabs */}
           <div className="flex gap-1 p-1 rounded-lg glass">
             {(['questions', 'settings'] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} className={cn('flex-1 py-1.5 text-xs font-semibold rounded-md transition-all capitalize', tab === t ? 'bg-brand-500 text-white' : 'text-theme-secondary')}>
@@ -448,8 +439,27 @@ export default function QuizBuilderPage() {
         ) : (
           <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
             <p className="text-xs font-bold text-theme-secondary uppercase tracking-wider">Quiz Settings</p>
-            <Input label="Description" value={quiz?.description ?? ''} onChange={e => setQuiz(q => q ? { ...q, description: e.target.value } : q)} placeholder="Quiz description..." />
-            <Input label="Category" value={quiz?.category ?? ''} onChange={e => setQuiz(q => q ? { ...q, category: e.target.value } : q)} placeholder="e.g. Science, Math..." />
+            <Input 
+              label="Quiz Title" 
+              value={quiz?.title ?? ''} 
+              onChange={e => setQuiz(q => q ? { ...q, title: e.target.value } : q)} 
+              onBlur={e => handleUpdateQuizField('title', e.target.value)}
+              placeholder="Quiz title..." 
+            />
+            <Input 
+              label="Description" 
+              value={quiz?.description ?? ''} 
+              onChange={e => setQuiz(q => q ? { ...q, description: e.target.value } : q)} 
+              onBlur={e => handleUpdateQuizField('description', e.target.value)}
+              placeholder="Quiz description..." 
+            />
+            <Input 
+              label="Category" 
+              value={quiz?.category ?? ''} 
+              onChange={e => setQuiz(q => q ? { ...q, category: e.target.value } : q)} 
+              onBlur={e => handleUpdateQuizField('category', e.target.value)}
+              placeholder="e.g. Science, Math..." 
+            />
           </div>
         )}
       </div>
@@ -458,16 +468,35 @@ export default function QuizBuilderPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-theme glass">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-theme-secondary">{questions.length} questions</span>
-            {selectedQuestion && (
-              <>
-                <span className="text-theme-secondary">·</span>
-                <Badge variant="purple">{QUESTION_TYPE_LABELS[selectedQuestion.type]}</Badge>
-              </>
-            )}
+          <div className="flex items-center gap-4 flex-1 min-w-0">
+            <button onClick={() => navigate('/admin/quizzes')} className="p-1.5 rounded-lg hover:bg-white/10 text-theme-secondary flex-shrink-0" title="Back to Quizzes">
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className="h-6 w-px bg-white/10 flex-shrink-0" />
+            <div className="flex-1 max-w-md relative group">
+              <input
+                value={quiz?.title ?? ''}
+                onChange={e => setQuiz(q => q ? { ...q, title: e.target.value } : q)}
+                onBlur={e => handleUpdateQuizField('title', e.target.value)}
+                className="w-full bg-white/5 text-xl font-bold text-theme-primary outline-none border border-theme hover:border-brand-500/50 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 rounded-xl px-4 py-2 transition-all pr-10"
+                placeholder="Enter Quiz Title..."
+                title="Edit Quiz Title"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-secondary pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity">
+                <Edit2 className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="hidden md:flex items-center gap-2 text-xs text-theme-secondary flex-shrink-0">
+              <span>{questions.length} questions</span>
+              {selectedQuestion && (
+                <>
+                  <span>·</span>
+                  <Badge variant="purple">{QUESTION_TYPE_LABELS[selectedQuestion.type]}</Badge>
+                </>
+              )}
+            </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-shrink-0 ml-4">
             <Button variant="outline" size="sm" leftIcon={<Eye className="w-4 h-4" />} onClick={() => navigate(`/admin/quizzes/${id}/settings`)}>
               Settings
             </Button>

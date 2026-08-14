@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { quizService } from '@/services/quiz.service'
 import { useAuthStore } from '@/store/authStore'
 import { useQuizStore } from '@/store/quizStore'
-import { cn, getTheme } from '@/lib/utils'
+import { cn, getTheme, getEmbedUrl } from '@/lib/utils'
 import type { Question, AnswerOption, LeaderboardEntry, Quiz } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -439,6 +439,17 @@ export default function QuizPlayPage() {
               <img src={currentQ.media_url} alt="Question media" className="max-h-48 object-contain" />
             </div>
           )}
+          {currentQ.media_url && currentQ.media_type === 'video' && (
+            <div className="mb-4 rounded-2xl overflow-hidden glass aspect-video flex items-center justify-center">
+              <iframe
+                src={getEmbedUrl(currentQ.media_url) || currentQ.media_url}
+                className="w-full h-full"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          )}
 
           {/* Question text */}
           <div className="glass-strong rounded-3xl p-6 mb-6 text-center">
@@ -447,7 +458,7 @@ export default function QuizPlayPage() {
           </div>
 
           {/* Options */}
-          {['multiple_choice', 'true_false', 'multi_select', 'poll'].includes(currentQ.type) && (
+          {['multiple_choice', 'true_false', 'multi_select', 'poll', 'image_based', 'video_based'].includes(currentQ.type) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {shuffledOptions.map((opt, i) => {
                 const color = ANSWER_COLORS[i % ANSWER_COLORS.length]

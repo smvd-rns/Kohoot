@@ -10,10 +10,8 @@ export type QuestionType =
   | 'multi_select'
   | 'fill_blank'
   | 'image_based'
-  | 'audio_based'
   | 'video_based'
   | 'poll'
-  | 'puzzle'
   | 'open_ended'
 
 export type QuizTheme =
@@ -104,8 +102,6 @@ export interface Question {
   order_index: number
   explanation?: string
   is_required: boolean
-  // For puzzle type
-  puzzle_items?: string[]
   // For fill_blank
   blank_answer?: string
   // For open_ended
