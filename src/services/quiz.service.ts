@@ -82,15 +82,36 @@ export const quizService = {
 
   async duplicateQuiz(quizId: string, adminId: string): Promise<Quiz> {
     const original = await this.getQuiz(quizId)
-    const { questions, custom_fields, ...quizData } = original
+    const { questions, custom_fields, id, created_at, updated_at, ...quizData } = original
+
+    // Reset stats for the copy
+    quizData.question_count = 0
+    quizData.total_plays = 0
+    quizData.avg_score = 0
 
     // Create duplicate
     const { data: newQuiz, error } = await supabase
       .from('quizzes')
-      .insert({ ...quizData, id: undefined, title: `${quizData.title} (Copy)`, is_published: false, admin_id: adminId, created_at: undefined, updated_at: undefined })
+      .insert({
+        ...quizData,
+        title: `${quizData.title} (Copy)`,
+        is_published: false,
+        admin_id: adminId
+      })
       .select()
       .single()
     if (error) throw error
+
+    // Duplicate custom fields (dropdowns, checkboxes, text fields, etc.)
+    if (custom_fields && custom_fields.length > 0) {
+      const { error: cfErr } = await supabase.from('custom_fields').insert(
+        custom_fields.map(({ id: _cfId, created_at: _cfCreated, ...cf }) => ({
+          ...cf,
+          quiz_id: newQuiz.id
+        }))
+      )
+      if (cfErr) throw cfErr
+    }
 
     // Duplicate questions and options
     if (questions) {
