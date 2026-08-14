@@ -84,7 +84,11 @@ export default function RegisterPage() {
       setProfile(profile)
       toast.success('Account created successfully! Welcome 🎉')
     } catch (err: any) {
-      const msg = err.message || ''
+      console.error('Registration error detailed:', err)
+      let msg = err?.message || ''
+      if (msg === '{}' || msg === '[object Object]') {
+         msg = typeof err === 'object' ? JSON.stringify(err) : String(err)
+      }
       const isAlreadyRegistered = msg.toLowerCase().includes('already registered') || 
                                   msg.toLowerCase().includes('already exists') ||
                                   msg.toLowerCase().includes('unique constraint')
@@ -95,7 +99,8 @@ export default function RegisterPage() {
           navigate(`/login?email=${encodeURIComponent(data.email)}${redirectParam}`)
         }, 1500)
       } else {
-        toast.error(msg || 'Registration failed')
+        if (msg === '{}' || !msg) msg = 'Registration failed: Unknown network error'
+        toast.error(msg)
       }
     }
   }

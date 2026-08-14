@@ -50,10 +50,16 @@ export default function LoginPage() {
       setProfile(profile)
       toast.success('Welcome back! 👋')
     } catch (err: any) {
-      if (err.message?.includes('pending superadmin approval')) {
+      console.error('Login error detailed:', err)
+      if (err?.message?.includes('pending superadmin approval')) {
         setPendingApproval(true)
       } else {
-        const msg = err.message || 'Login failed'
+        // Sometimes Supabase returns an empty object or opaque error
+        let msg = err?.message || 'Login failed'
+        if (msg === '{}' || msg === '[object Object]') {
+           msg = typeof err === 'object' ? JSON.stringify(err) : String(err)
+        }
+        if (msg === '{}') msg = 'Login failed: Invalid credentials or network error'
         toast.error(msg)
       }
     }
