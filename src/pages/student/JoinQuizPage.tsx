@@ -35,7 +35,7 @@ export default function JoinQuizPage() {
   const [alreadyCompleted, setAlreadyCompleted] = useState(false)
   const [allowRetakes, setAllowRetakes] = useState(true)
 
-  const { register, handleSubmit, getValues, setValue, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, getValues, setValue, watch, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       code: searchParams.get('code') ?? '',
@@ -146,10 +146,13 @@ export default function JoinQuizPage() {
     const p = await quizService.joinSession(sId, currentProfile.id, currentProfile.display_name, currentProfile.avatar_seed)
 
     if (customFields.length > 0) {
-      const responses = customFields.map(f => ({
-        field_id: f.id,
-        value: data[f.id] ?? ''
-      }))
+      const responses = customFields.map(f => {
+        const isCustomSelected = f.field_type === 'dropdown' && f.allow_custom && data[f.id] === (f.custom_label || 'Other')
+        return {
+          field_id: f.id,
+          value: (isCustomSelected ? data[`${f.id}_custom`] : data[f.id]) ?? ''
+        }
+      })
       await quizService.saveCustomFieldResponses(p.id, responses)
     }
 
@@ -179,7 +182,10 @@ export default function JoinQuizPage() {
       let currentProfile = profile
 
       for (const field of customFields) {
-        if (field.is_required && !data[field.id]) {
+        const isCustomSelected = field.field_type === 'dropdown' && field.allow_custom && data[field.id] === (field.custom_label || 'Other')
+        const val = isCustomSelected ? data[`${field.id}_custom`] : data[field.id]
+
+        if (field.is_required && (!val || val.toString().trim() === '')) {
           toast.error(`Please fill out ${field.label}`)
           setLoading(false)
           return
@@ -314,15 +320,115 @@ export default function JoinQuizPage() {
                         {...register('nickname')}
                       />
                     )}
-                    {customFields.map(field => (
-                      <Input
-                        key={field.id}
-                        label={field.label + (field.is_required ? ' *' : '')}
-                        placeholder={field.placeholder ?? ''}
-                        error={errors[field.id]?.message as string}
-                        {...register(field.id)}
-                      />
-                    ))}
+                    {customFields.map(field => {
+                      const labelText = field.label + (field.is_required ? ' *' : '')
+                      const fieldOpts = field.options ?? []
+
+                      if (field.field_type === 'dropdown') {
+                        const selectedValue = watch(field.id)
+                        const showWriteIn = field.allow_custom && selectedValue === (field.custom_label || 'Other')
+                        return (
+                          <div key={field.id} className="space-y-3.5 text-left">
+                            <div className="space-y-1">
+                              <label className="text-sm font-semibold text-theme-primary">{labelText}</label>
+                              <select
+                                {...register(field.id)}
+                                className="input-field w-full bg-[var(--color-bg-secondary)] border border-theme text-white rounded-xl py-3 px-4 focus:ring-2 focus:ring-brand-500 focus:outline-none"
+                              >
+                                <option value="">Select an option...</option>
+                                {fieldOpts.map(o => (
+                                  <option key={o} value={o} className="bg-slate-900 text-white">{o}</option>
+                                ))}
+                                {field.allow_custom && (
+                                  <option value={field.custom_label || 'Other'} className="bg-slate-900 text-white font-bold text-brand-400">
+                                    {field.custom_label || 'Other'}
+                                  </option>
+                                )}
+                              </select>
+                              {errors[field.id] && !showWriteIn && (
+                                <p className="text-xs text-danger-400 mt-1">{errors[field.id]?.message as string}</p>
+                              )}
+                            </div>
+
+                            {/* Dynamically show text input when Custom Label is chosen */}
+                            {showWriteIn && (
+                              <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
+                                <label className="text-xs font-semibold text-theme-secondary">Please specify:</label>
+                                <input
+                                  type="text"
+                                  placeholder="Type your answer..."
+                                  {...register(`${field.id}_custom`, {
+                                    required: field.is_required ? "Please specify your custom option" : false
+                                  })}
+                                  className="input-field w-full bg-[var(--color-bg-secondary)] border border-theme text-white rounded-xl py-2 px-3.5 focus:ring-2 focus:ring-brand-500 focus:outline-none text-sm"
+                                />
+                                {errors[`${field.id}_custom`] && (
+                                  <p className="text-xs text-danger-400 mt-1">{errors[`${field.id}_custom`]?.message as string}</p>
+                                )}
+                              </motion.div>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      if (field.field_type === 'radio') {
+                        return (
+                          <div key={field.id} className="space-y-2 text-left">
+                            <label className="text-sm font-semibold text-theme-primary">{labelText}</label>
+                            <div className="space-y-2">
+                              {fieldOpts.map(o => (
+                                <label key={o} className="flex items-center gap-2.5 cursor-pointer text-sm text-theme-secondary hover:text-white">
+                                  <input
+                                    type="radio"
+                                    value={o}
+                                    {...register(field.id)}
+                                    className="w-4 h-4 accent-brand-500 rounded-full cursor-pointer"
+                                  />
+                                  <span>{o}</span>
+                                </label>
+                              ))}
+                            </div>
+                            {errors[field.id] && (
+                              <p className="text-xs text-danger-400 mt-1">{errors[field.id]?.message as string}</p>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      if (field.field_type === 'checkbox') {
+                        return (
+                          <div key={field.id} className="space-y-2 text-left">
+                            <label className="text-sm font-semibold text-theme-primary">{labelText}</label>
+                            <div className="space-y-2">
+                              {fieldOpts.map(o => (
+                                <label key={o} className="flex items-center gap-2.5 cursor-pointer text-sm text-theme-secondary hover:text-white">
+                                  <input
+                                    type="checkbox"
+                                    value={o}
+                                    {...register(field.id)}
+                                    className="w-4 h-4 accent-brand-500 rounded cursor-pointer"
+                                  />
+                                  <span>{o}</span>
+                                </label>
+                              ))}
+                            </div>
+                            {errors[field.id] && (
+                              <p className="text-xs text-danger-400 mt-1">{errors[field.id]?.message as string}</p>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <Input
+                          key={field.id}
+                          label={labelText}
+                          placeholder={field.placeholder ?? ''}
+                          error={errors[field.id]?.message as string}
+                          {...register(field.id)}
+                        />
+                      )
+                    })}
                   </>
                 )}
               </motion.div>

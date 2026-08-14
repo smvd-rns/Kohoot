@@ -128,15 +128,30 @@ export default function QuizzesPage() {
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ delay: i * 0.04 }}
                 >
-                  <Card hover className="relative overflow-hidden group h-full flex flex-col">
+                  <Card 
+                    hover 
+                    className={cn(
+                      "relative overflow-hidden group h-full flex flex-col transition-all border duration-300", 
+                      quiz.is_published 
+                        ? "border-emerald-500/10 shadow-[0_4px_20px_rgba(16,185,129,0.05)] bg-[var(--color-bg-primary)]" 
+                        : "border-dashed border-white/20 opacity-60 bg-neutral-950/20 hover:opacity-90 hover:border-white/30"
+                    )}
+                  >
                     {/* Theme gradient bar */}
-                    <div className="h-1 absolute top-0 left-0 right-0 rounded-t-2xl" style={{ background: theme.gradient }} />
+                    {quiz.is_published ? (
+                      <div className="h-1 absolute top-0 left-0 right-0 rounded-t-2xl" style={{ background: theme.gradient }} />
+                    ) : (
+                      <div className="h-1 absolute top-0 left-0 right-0 rounded-t-2xl bg-neutral-700" />
+                    )}
 
                     {/* Header */}
                     <div className="flex items-start justify-between gap-2 mb-4 pt-2">
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
-                        style={{ background: theme.gradient }}>
-                        {theme.emoji}
+                      <div className={cn(
+                        "w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0",
+                        quiz.is_published ? "" : "grayscale opacity-50 bg-neutral-800"
+                      )}
+                        style={{ background: quiz.is_published ? theme.gradient : undefined }}>
+                        {quiz.is_published ? theme.emoji : '📝'}
                       </div>
                       <div className="relative">
                         <button
@@ -172,7 +187,7 @@ export default function QuizzesPage() {
 
                     {/* Content */}
                     <div className="flex-1">
-                      <h3 className="font-bold text-theme-primary mb-1 truncate">{quiz.title}</h3>
+                      <h3 className={cn("font-bold mb-1 truncate", quiz.is_published ? "text-theme-primary" : "text-theme-secondary")}>{quiz.title}</h3>
                       {quiz.description && <p className="text-xs text-theme-secondary mb-3 line-clamp-2">{quiz.description}</p>}
                       <div className="flex flex-wrap gap-2 text-xs text-theme-secondary mb-4">
                         <span>📝 {quiz.question_count} questions</span>
@@ -183,16 +198,18 @@ export default function QuizzesPage() {
 
                     {/* Footer */}
                     <div className="flex items-center justify-between pt-4 border-t border-theme">
-                      <Badge variant={quiz.is_published ? 'success' : 'default'}>
+                      <Badge variant={quiz.is_published ? 'success' : 'default'} className={quiz.is_published ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-white/5 text-white/40 border-white/10'}>
                         {quiz.is_published ? '● Published' : '○ Draft'}
                       </Badge>
                       <div className="flex gap-2">
                         <Link to={`/admin/quizzes/${quiz.id}/edit`}>
                           <Button variant="ghost" size="xs" leftIcon={<Edit className="w-3 h-3" />}>Edit</Button>
                         </Link>
-                        <Link to={`/admin/sessions?quiz=${quiz.id}`}>
-                          <Button size="xs" leftIcon={<Play className="w-3 h-3" />}>Launch</Button>
-                        </Link>
+                        {quiz.is_published && (
+                          <Link to={`/admin/sessions?quiz=${quiz.id}`}>
+                            <Button size="xs" leftIcon={<Play className="w-3 h-3" />}>Launch</Button>
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </Card>

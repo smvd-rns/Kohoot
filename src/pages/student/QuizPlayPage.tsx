@@ -7,8 +7,8 @@ import { supabase } from '@/lib/supabase'
 import { quizService } from '@/services/quiz.service'
 import { useAuthStore } from '@/store/authStore'
 import { useQuizStore } from '@/store/quizStore'
-import { cn } from '@/lib/utils'
-import type { Question, AnswerOption, LeaderboardEntry } from '@/types'
+import { cn, getTheme } from '@/lib/utils'
+import type { Question, AnswerOption, LeaderboardEntry, Quiz } from '@/types'
 import toast from 'react-hot-toast'
 
 const ANSWER_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
@@ -112,6 +112,9 @@ export default function QuizPlayPage() {
   const [musicUrl, setMusicUrl] = useState('')
   const [isMuted, setIsMuted] = useState(true)   // start muted — browsers block autoplay without user gesture
   const [showSoundBanner, setShowSoundBanner] = useState(true) // prompt user to enable sound
+  const [themeId, setThemeId] = useState<string>('modern')
+  const [shuffledOptions, setShuffledOptions] = useState<AnswerOption[]>([])
+  const [quiz, setQuiz] = useState<Quiz | null>(null)
   const answerStartTime = useRef(Date.now())
   const audioRef = useRef<HTMLAudioElement>(null)
 
@@ -140,17 +143,40 @@ export default function QuizPlayPage() {
     try {
       const session = await quizService.getSession(sessionId)
       
+      if (session.quiz) {
+        setQuiz(session.quiz as unknown as Quiz)
+      }
       if (session.quiz?.background_music_url) {
         setMusicUrl(session.quiz.background_music_url)
       } else {
         import('@/lib/music').then(m => setMusicUrl(m.BACKGROUND_MUSIC[1].url))
       }
 
-      const qs = await quizService.getQuestions(session.quiz_id)
+      let qs = await quizService.getQuestions(session.quiz_id)
+      
+      // Shuffle questions if enabled in settings
+      if (session.quiz?.shuffle_questions) {
+        qs = [...qs].sort(() => Math.random() - 0.5)
+      }
       setQuestions(qs)
-      setCurrentIdx(session.current_question_index ?? 0)
-      setCurrentQ(qs[session.current_question_index ?? 0] ?? null)
-      setTimeLeft(qs[0]?.time_limit ?? 30)
+      
+      // Store current quiz theme styling values
+      const quizTheme = session.quiz?.theme ?? 'modern'
+      setThemeId(quizTheme)
+
+      const activeIdx = session.current_question_index ?? 0
+      setCurrentIdx(activeIdx)
+      const activeQ = qs[activeIdx] ?? null
+      setCurrentQ(activeQ)
+      
+      // Shuffle options if enabled for this question
+      if (activeQ && session.quiz?.shuffle_options && activeQ.answer_options) {
+        setShuffledOptions([...activeQ.answer_options].sort(() => Math.random() - 0.5))
+      } else {
+        setShuffledOptions(activeQ?.answer_options ?? [])
+      }
+
+      setTimeLeft(activeQ?.time_limit ?? 30)
 
       const part = (session.participants as unknown as Array<{ student_id: string; id: string; score: number }>)?.find(p => p.student_id === profile.id)
       if (part) { 
@@ -158,14 +184,13 @@ export default function QuizPlayPage() {
         setScore(part.score)
 
         // Check if student has already answered the current question to prevent cheating on reload
-        const currentQuestion = qs[session.current_question_index ?? 0]
-        if (currentQuestion) {
+        if (activeQ) {
           const { data: answeredList } = await supabase
             .from('participant_answers')
             .select('*')
             .eq('participant_id', part.id)
           
-          const existingAnswer = answeredList?.find(ans => ans.question_id === currentQuestion.id)
+          const existingAnswer = answeredList?.find(ans => ans.question_id === activeQ.id)
           if (existingAnswer) {
             setHasAnswered(true)
             setIsCorrect(existingAnswer.is_correct)
@@ -215,8 +240,17 @@ export default function QuizPlayPage() {
         const idx = s.current_question_index
         if (idx !== currentIdx) {
           setCurrentIdx(idx)
-          setCurrentQ(questions[idx] ?? null)
-          setTimeLeft(questions[idx]?.time_limit ?? 30)
+          const nextQ = questions[idx] ?? null
+          setCurrentQ(nextQ)
+          
+          // Shuffle options if enabled for next question in live mode
+          if (nextQ && quiz?.shuffle_options && nextQ.answer_options) {
+            setShuffledOptions([...nextQ.answer_options].sort(() => Math.random() - 0.5))
+          } else {
+            setShuffledOptions(nextQ?.answer_options ?? [])
+          }
+
+          setTimeLeft(nextQ?.time_limit ?? 30)
           setSelected([])
           setHasAnswered(false)
           setIsCorrect(null)
@@ -290,11 +324,11 @@ export default function QuizPlayPage() {
     )
   }
 
-  const options = currentQ.answer_options ?? []
   const isMulti = currentQ.type === 'multi_select'
+  const activeTheme = getTheme(themeId as never)
 
   return (
-    <div className="fixed inset-0 flex flex-col" style={{ background: 'linear-gradient(135deg, var(--color-bg-primary), var(--color-bg-secondary))' }}>
+    <div data-theme={themeId} className="fixed inset-0 flex flex-col transition-colors duration-500" style={{ background: 'linear-gradient(135deg, var(--color-bg-primary), var(--color-bg-secondary))' }}>
       {musicUrl && <audio key={musicUrl} ref={audioRef} src={musicUrl} autoPlay loop muted={isMuted} />}
 
       {/* === Sound enable banner === */}
@@ -337,45 +371,7 @@ export default function QuizPlayPage() {
         )}
       </AnimatePresence>
 
-      {/* Score feedback */}
-      <AnimatePresence>
-        {hasAnswered && !showLeaderboard && (
-          <motion.div
-            className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/75 backdrop-blur-sm pointer-events-none"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className={cn('flex flex-col items-center gap-4 p-8 rounded-3xl border shadow-2xl max-w-xs w-full mx-4 text-center', 
-                isCorrect ? 'bg-[#121c16] border-success-500/30' : 'bg-[#1c1212] border-danger-500/30')}
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            >
-              {isCorrect ? (
-                <>
-                  <div className="w-20 h-20 rounded-full bg-success-500/10 flex items-center justify-center text-success-400">
-                    <CheckCircle className="w-12 h-12" />
-                  </div>
-                  <div>
-                    <p className="text-4xl font-black text-white">+{pointsEarned}</p>
-                    <p className="text-success-400 font-bold text-lg mt-1">Correct! 🎉</p>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="w-20 h-20 rounded-full bg-danger-500/10 flex items-center justify-center text-danger-400">
-                    <XCircle className="w-12 h-12" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-black text-white">Wrong!</p>
-                    <p className="text-danger-400 font-medium mt-1">Better luck next time</p>
-                  </div>
-                </>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Score feedback overlay removed - now displayed inline at the bottom */}
 
       {/* Header */}
       <div className="relative z-10 px-4 pt-3 pb-2 glass-strong border-b border-white/10">
@@ -419,7 +415,7 @@ export default function QuizPlayPage() {
         {/* Sub-header: Question progress */}
         <div className="flex items-center justify-between max-w-2xl mx-auto text-xs border-t border-white/5 pt-2">
           <div className="text-theme-secondary font-bold">
-            Question <span className="text-white text-sm font-black ml-1">{currentIdx + 1} / {questions.length}</span>
+            Question <span className="text-theme-primary text-sm font-black ml-1">{currentIdx + 1} / {questions.length}</span>
           </div>
         </div>
 
@@ -446,14 +442,14 @@ export default function QuizPlayPage() {
 
           {/* Question text */}
           <div className="glass-strong rounded-3xl p-6 mb-6 text-center">
-            <p className="text-xl sm:text-2xl font-bold text-white leading-snug">{currentQ.text || 'Loading question...'}</p>
+            <p className="text-xl sm:text-2xl font-bold text-theme-primary leading-snug">{currentQ.text || 'Loading question...'}</p>
             {isMulti && <p className="text-xs text-theme-secondary mt-2">Select all that apply, then submit</p>}
           </div>
 
           {/* Options */}
           {['multiple_choice', 'true_false', 'multi_select', 'poll'].includes(currentQ.type) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {options.map((opt, i) => {
+              {shuffledOptions.map((opt, i) => {
                 const color = ANSWER_COLORS[i % ANSWER_COLORS.length]
                 const isSelected = selected.includes(opt.id)
                 const showCorrect = hasAnswered && opt.is_correct
@@ -469,19 +465,19 @@ export default function QuizPlayPage() {
                     className={cn(
                       'relative p-4 rounded-2xl text-white font-bold text-left transition-all text-sm sm:text-base',
                       'flex items-center gap-3',
-                      showCorrect && 'ring-4 ring-white scale-105',
-                      showWrong && 'opacity-60',
+                      showCorrect && 'ring-4 ring-green-400 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.4)]',
+                      showWrong && 'opacity-30',
                       isSelected && !hasAnswered && 'ring-4 ring-white'
                     )}
                     style={{
                       background: showCorrect ? '#22c55e' : showWrong ? '#ef4444' : color,
-                      opacity: hasAnswered && !isSelected && !opt.is_correct ? 0.6 : 1,
+                      opacity: hasAnswered && !showCorrect && !showWrong ? 0.6 : 1,
                     }}
                   >
                     <span className="text-xl opacity-70 flex-shrink-0">{ANSWER_ICONS[i % 4]}</span>
                     <span className="flex-1">{opt.text}</span>
-                    {showCorrect && <CheckCircle className="w-5 h-5 ml-auto flex-shrink-0" />}
-                    {showWrong && <XCircle className="w-5 h-5 ml-auto flex-shrink-0" />}
+                    {showCorrect && <CheckCircle className="w-5 h-5 ml-auto flex-shrink-0 text-white" />}
+                    {showWrong && <XCircle className="w-5 h-5 ml-auto flex-shrink-0 text-white" />}
                   </motion.button>
                 )
               })}
@@ -492,7 +488,7 @@ export default function QuizPlayPage() {
           {currentQ.type === 'fill_blank' && !hasAnswered && (
             <div className="flex gap-3">
               <input
-                className="input-field flex-1 text-white"
+                className="input-field flex-1"
                 placeholder="Type your answer..."
                 value={selected[0] ?? ''}
                 onChange={e => setSelected([e.target.value])}
@@ -505,7 +501,7 @@ export default function QuizPlayPage() {
           {currentQ.type === 'open_ended' && !hasAnswered && (
             <div className="space-y-3">
               <textarea
-                className="input-field text-white min-h-[100px]"
+                className="input-field min-h-[100px]"
                 placeholder="Write your answer..."
                 value={selected[0] ?? ''}
                 onChange={e => setSelected([e.target.value])}
@@ -524,13 +520,56 @@ export default function QuizPlayPage() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-4 glass rounded-2xl p-4"
+              className="mt-6 border border-theme bg-theme-secondary rounded-2xl p-5 shadow-sm"
             >
-              <p className="text-sm text-theme-secondary">💡 {currentQ.explanation}</p>
+              <div className="flex gap-2.5 items-start">
+                <span className="text-xl leading-none">💡</span>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-theme-secondary">Explanation</h4>
+                  <p className="text-sm sm:text-base text-theme-primary leading-relaxed font-medium">{currentQ.explanation}</p>
+                </div>
+              </div>
             </motion.div>
           )}
         </motion.div>
       </div>
+
+      {/* Inline Bottom Score Feedback Panel */}
+      <AnimatePresence>
+        {hasAnswered && !showLeaderboard && (
+          <motion.div 
+            initial={{ y: 100, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            exit={{ y: 100, opacity: 0 }}
+            className={cn(
+              "relative z-20 border-t py-4 px-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_-8px_30px_rgba(0,0,0,0.3)] backdrop-blur-md",
+              isCorrect ? "bg-emerald-950/80 border-emerald-500/20" : "bg-rose-950/80 border-rose-500/20"
+            )}
+          >
+            <div className="flex items-center gap-3.5">
+              <div className={cn(
+                "w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0",
+                isCorrect ? "bg-emerald-500/15 text-emerald-400" : "bg-rose-500/15 text-rose-400"
+              )}>
+                {isCorrect ? <CheckCircle className="w-7 h-7" /> : <XCircle className="w-7 h-7" />}
+              </div>
+              <div className="text-left">
+                <p className="text-white font-extrabold text-lg sm:text-xl">
+                  {isCorrect ? `Correct! +${pointsEarned} pts` : "Incorrect!"}
+                </p>
+                <p className="text-xs text-white/70 font-medium">
+                  {isCorrect ? "Awesome job! Keep it up." : "Better luck on the next question."}
+                </p>
+              </div>
+            </div>
+
+            {/* In live host mode, waiting for host to progress or self-placed next button */}
+            <div className="text-xs text-white/50 font-bold uppercase tracking-widest bg-white/5 px-4 py-2.5 rounded-xl border border-white/5">
+              Waiting for next question...
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

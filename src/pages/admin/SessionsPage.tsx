@@ -36,9 +36,10 @@ export default function SessionsPage() {
     ]).then(([q, s]) => {
       setQuizzes(q)
       setSessions(s as unknown as QuizSession[])
+      const publishedQuizzes = q.filter(x => x.is_published)
       const targetQuizId = quizIdFromUrl && q.some(x => x.id === quizIdFromUrl)
         ? quizIdFromUrl
-        : (q[0]?.id ?? '')
+        : (publishedQuizzes[0]?.id ?? '')
       setSelectedQuizId(targetQuizId)
       if (quizIdFromUrl) setCreateModal(true)
     }).finally(() => setLoading(false))
@@ -242,7 +243,7 @@ export default function SessionsPage() {
             label="Select Quiz"
             value={selectedQuizId}
             onChange={e => setSelectedQuizId(e.target.value)}
-            options={quizzes.map(q => ({ value: q.id, label: q.title }))}
+            options={quizzes.filter(q => q.is_published).map(q => ({ value: q.id, label: q.title }))}
             placeholder="Select a quiz..."
           />
 

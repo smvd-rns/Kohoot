@@ -216,6 +216,8 @@ export interface CustomField {
   is_required: boolean
   placeholder?: string
   options?: string[]           // for dropdown, radio, checkbox
+  allow_custom?: boolean       // allow write-in for dropdowns
+  custom_label?: string        // customizable placeholder for the "other" dropdown value
   order_index: number
   created_at: string
 }
