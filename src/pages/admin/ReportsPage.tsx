@@ -153,7 +153,8 @@ export default function ReportsPage() {
             if (cleaned) values.add(cleaned)
           }
         }
-        if (values.size > 0 && values.size <= 30) {
+        const isOptionType = f.field_type === 'dropdown' || f.field_type === 'radio' || f.field_type === 'checkbox'
+        if (values.size > 0 && (isOptionType || values.size <= 30)) {
           result[f.id] = Array.from(values).sort()
         }
       }

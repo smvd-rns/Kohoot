@@ -360,15 +360,6 @@ export const quizService = {
           answered_at: new Date().toISOString(),
         }, { onConflict: 'participant_id,question_id' })
       if (error) throw error
-
-      // Update participant score via RPC
-      if (isCorrect) {
-        const { error: rpcErr } = await supabase.rpc('add_participant_score', { participant_id_arg: participantId, points_arg: pointsEarned })
-        if (rpcErr) throw rpcErr
-      } else {
-        const { error: rpcErr } = await supabase.rpc('increment_wrong_answers', { participant_id_arg: participantId })
-        if (rpcErr) throw rpcErr
-      }
     })
   },
 
