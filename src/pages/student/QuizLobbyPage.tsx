@@ -44,7 +44,8 @@ export default function QuizLobbyPage() {
     try {
       const s = await quizService.getSession(sessionId)
       setSession(s as unknown as QuizSession)
-      setParticipants((s.participants ?? []) as unknown as SessionParticipant[])
+      const allParticipants = (s.participants ?? []) as unknown as SessionParticipant[]
+      setParticipants(allParticipants)
       
       if (s.quiz?.background_music_url) {
         setMusicUrl(s.quiz.background_music_url)
@@ -52,11 +53,22 @@ export default function QuizLobbyPage() {
         import('@/lib/music').then(m => setMusicUrl(m.BACKGROUND_MUSIC[1].url))
       }
 
+      // Guard: if this student hasn't joined yet and there are custom fields,
+      // send them through the join form first so registration data is collected.
+      const alreadyJoined = profile && allParticipants.some((p: any) => p.student_id === profile.id)
+      if (!alreadyJoined) {
+        const customFields = await quizService.getCustomFields(s.quiz_id)
+        if (customFields.length > 0) {
+          navigate(`/student/join?code=${s.room_code}`, { replace: true })
+          return
+        }
+      }
+
       // If session already active, go to play
       if (s.status === 'active') navigate(`/quiz/play/${sessionId}`)
       if (s.status === 'completed') navigate(`/quiz/results/${sessionId}`)
     } finally { setLoading(false) }
-  }, [sessionId, navigate])
+  }, [sessionId, navigate, profile])
 
   useEffect(() => { loadSession() }, [loadSession])
 

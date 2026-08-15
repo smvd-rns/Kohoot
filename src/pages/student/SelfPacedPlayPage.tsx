@@ -150,7 +150,7 @@ export default function SelfPacedPlayPage() {
         if (customFields.length > 0) {
           // Redirect to join page to collect registration data first.
           // JoinQuizPage will save custom field responses, then navigate back here.
-          navigate(`/join?code=${session.room_code}`, { replace: true })
+          navigate(`/student/join?code=${session.room_code}`, { replace: true })
           return
         }
         const joined = await quizService.joinSession(sessionId, profile.id, profile.display_name, profile.avatar_seed)
