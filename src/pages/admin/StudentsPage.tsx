@@ -33,7 +33,15 @@ export default function StudentsPage() {
 
   const handleExport = () => {
     exportToCSV(
-      students.map(s => ({ username: s.username, name: s.display_name, email: s.email, xp: s.xp, level: s.level, joined: formatDate(s.created_at) })),
+      students.map(s => ({ 
+        username: s.username, 
+        name: s.display_name, 
+        email: s.email, 
+        mobile: s.phone || '-',
+        xp: s.xp, 
+        level: s.level, 
+        joined: formatDate(s.created_at) 
+      })),
       'students'
     )
   }
@@ -41,7 +49,8 @@ export default function StudentsPage() {
   const filtered = students.filter(s =>
     s.display_name.toLowerCase().includes(search.toLowerCase()) ||
     s.username.toLowerCase().includes(search.toLowerCase()) ||
-    s.email.toLowerCase().includes(search.toLowerCase())
+    s.email.toLowerCase().includes(search.toLowerCase()) ||
+    (s.phone && s.phone.includes(search))
   )
 
   return (
@@ -76,15 +85,15 @@ export default function StudentsPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-theme">
-                  {['Student', 'Username', 'Email', 'XP / Level', 'Joined', 'Actions'].map(h => (
+                  {['Student', 'Username', 'Email', 'Mobile', 'XP / Level', 'Joined', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-theme-secondary uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-theme">
+              <tbody className="divide-y divide-theme text-sm">
                 {filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((s, i) => (
                   <motion.tr key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.02 }} className="hover:bg-white/3 transition-colors">
                     <td className="px-4 py-3">
@@ -95,6 +104,7 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-theme-secondary">@{s.username}</td>
                     <td className="px-4 py-3 text-sm text-theme-secondary">{s.email}</td>
+                    <td className="px-4 py-3 text-sm text-theme-secondary">{s.phone || <span className="text-white/20 italic">Not filled</span>}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Badge variant="purple">Lv {s.level}</Badge>

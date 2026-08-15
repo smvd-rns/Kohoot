@@ -788,6 +788,7 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
                     <th className="px-4 py-3">Student Name</th>
                     <th className="px-4 py-3">Email</th>
                     <th className="px-4 py-3">Username</th>
+                    <th className="px-4 py-3">Mobile</th>
                     <th className="px-4 py-3">Registered</th>
                   </tr>
                 </thead>
@@ -797,6 +798,7 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
                       <td className="px-4 py-3 font-semibold text-theme-primary">{st.display_name}</td>
                       <td className="px-4 py-3 text-theme-secondary">{st.email}</td>
                       <td className="px-4 py-3 text-theme-secondary">@{st.username}</td>
+                      <td className="px-4 py-3 text-theme-secondary">{st.phone || <span className="text-white/20 italic">Not filled</span>}</td>
                       <td className="px-4 py-3 text-theme-secondary">{formatDate(st.created_at)}</td>
                     </tr>
                   ))}
