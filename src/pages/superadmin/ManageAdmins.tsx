@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card, Avatar, Badge, EmptyState, Spinner, Button, StatCard } from '@/components/ui'
 import { supabase } from '@/lib/supabase'
 import { formatDate, timeAgo } from '@/lib/utils'
@@ -6,7 +6,7 @@ import type { Profile, Quiz } from '@/types'
 import toast from 'react-hot-toast'
 import { quizService } from '@/services/quiz.service'
 import { studentService } from '@/services/student.service'
-import { BookOpen, Play, Users, BarChart3, ArrowLeft, Download, CheckCircle2, Award } from 'lucide-react'
+import { BookOpen, Play, Users, BarChart3, ArrowLeft, Download, CheckCircle2, Award, Search, SlidersHorizontal, ArrowUpDown, ArrowUp, ArrowDown, X, Clock, Trophy } from 'lucide-react'
 
 export default function ManageAdmins() {
   const [admins, setAdmins] = useState<Profile[]>([])
@@ -140,6 +140,10 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
   const [loadingReport, setLoadingReport] = useState(false)
   const [detailPage, setDetailPage] = useState(1)
   const [detailPageSize, setDetailPageSize] = useState(10)
+  // Report filters/sort
+  const [detailSearch, setDetailSearch] = useState('')
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' }>({ key: 'score', direction: 'desc' })
+  const [fieldFilters, setFieldFilters] = useState<Record<string, string>>({})
 
   useEffect(() => {
     setLoading(true)
@@ -165,6 +169,10 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
       return
     }
     setLoadingReport(true)
+    setDetailSearch('')
+    setSortConfig({ key: 'score', direction: 'desc' })
+    setFieldFilters({})
+    setDetailPage(1)
     quizService.getSessionReport(selectedSessionId).then(data => {
       setReport(data)
     }).catch(err => {
@@ -175,12 +183,117 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
     })
   }, [selectedSessionId])
 
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  const cleanFieldValue = (val: string): string => {
+    if (!val) return ''
+    try {
+      const parsed = JSON.parse(val)
+      if (Array.isArray(parsed)) return parsed.map((v: string) => v.trim()).join(', ')
+    } catch { /* not JSON */ }
+    return val.trim()
+  }
+
+  const formatTimestamp = (ts: string) => {
+    const d = new Date(ts)
+    return d.toLocaleString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    })
+  }
+
+  const fieldUniqueValues = useMemo(() => {
+    if (!report) return {} as Record<string, string[]>
+    const result: Record<string, string[]> = {}
+    for (const f of report.customFields ?? []) {
+      const values = new Set<string>()
+      for (const p of report.participants) {
+        const resp = p.custom_field_responses?.find((r: any) => r.field_id === f.id)
+        if (resp?.value) {
+          const cleaned = cleanFieldValue(resp.value)
+          if (cleaned) values.add(cleaned)
+        }
+      }
+      if (values.size > 0 && values.size <= 30) {
+        result[f.id] = Array.from(values).sort()
+      }
+    }
+    return result
+  }, [report])
+
+  const filteredParticipants = useMemo(() => {
+    if (!report) return []
+    let list = [...report.participants]
+    if (detailSearch.trim()) {
+      const q = detailSearch.toLowerCase()
+      list = list.filter((p: any) => {
+        if (p.display_name.toLowerCase().includes(q)) return true
+        for (const resp of p.custom_field_responses ?? []) {
+          if (cleanFieldValue(resp.value).toLowerCase().includes(q)) return true
+        }
+        return false
+      })
+    }
+    for (const [fieldId, selectedVal] of Object.entries(fieldFilters)) {
+      if (!selectedVal) continue
+      list = list.filter((p: any) => {
+        const resp = p.custom_field_responses?.find((r: any) => r.field_id === fieldId)
+        return cleanFieldValue(resp?.value ?? '') === selectedVal
+      })
+    }
+    
+    const { key, direction } = sortConfig
+    list.sort((a: any, b: any) => {
+      let valA: any = ''
+      let valB: any = ''
+
+      if (key === 'student') {
+        valA = a.display_name.toLowerCase()
+        valB = b.display_name.toLowerCase()
+      } else if (key === 'score') {
+        valA = a.score
+        valB = b.score
+      } else if (key === 'correct') {
+        valA = a.correct_answers
+        valB = b.correct_answers
+      } else if (key === 'wrong') {
+        valA = a.wrong_answers
+        valB = b.wrong_answers
+      } else if (key === 'accuracy') {
+        const totalQ = report.session.quiz?.question_count ?? 1
+        valA = totalQ > 0 ? (a.correct_answers / totalQ) * 100 : 0
+        valB = totalQ > 0 ? (b.correct_answers / totalQ) * 100 : 0
+      } else if (key === 'joined_at') {
+        valA = new Date(a.joined_at).getTime()
+        valB = new Date(b.joined_at).getTime()
+      } else {
+        const respA = a.custom_field_responses?.find((r: any) => r.field_id === key)
+        const respB = b.custom_field_responses?.find((r: any) => r.field_id === key)
+        valA = cleanFieldValue(respA?.value ?? '').toLowerCase()
+        valB = cleanFieldValue(respB?.value ?? '').toLowerCase()
+      }
+
+      if (valA < valB) return direction === 'asc' ? -1 : 1
+      if (valA > valB) return direction === 'asc' ? 1 : -1
+      return 0
+    })
+
+    return list
+  }, [report, detailSearch, fieldFilters, sortConfig])
+
+  const activeFilterCount = Object.values(fieldFilters).filter(Boolean).length
+
+  const clearAllFilters = () => {
+    setFieldFilters({})
+    setDetailSearch('')
+    setSortConfig({ key: 'score', direction: 'desc' })
+    setDetailPage(1)
+  }
+
   const exportToCSV = (headers: string[], rows: string[][], filename: string) => {
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(val => `"${(val || '').replace(/"/g, '""')}"`).join(','))
+      ...rows.map(row => row.map(val => `"${(val || '').replace(/"/g, '""')}`).join(','))
     ].join('\n')
-
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -195,29 +308,21 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
   const handleExportReport = () => {
     if (!report) return
     const customHeaders = report.customFields?.map((f: any) => f.label) ?? []
-    const headers = ['Rank', 'Participant Name', 'Score', 'Correct Answers', 'Wrong Answers', 'Accuracy (%)', ...customHeaders]
-    
-    const rows = report.participants.map((p: any, idx: number) => {
+    const headers = ['Rank', 'Participant Name', 'Score', 'Correct Answers', 'Wrong Answers', 'Accuracy (%)', 'Joined At', ...customHeaders]
+    const rows = filteredParticipants.map((p: any, idx: number) => {
       const totalQuestions = report.session.quiz?.question_count ?? 0
       const accuracy = totalQuestions > 0 ? Math.round((p.correct_answers / totalQuestions) * 100) : 0
-      
       const row = [
-        (idx + 1).toString(),
-        p.display_name,
-        p.score.toString(),
-        p.correct_answers.toString(),
-        p.wrong_answers.toString(),
-        `${accuracy}%`
+        (idx + 1).toString(), p.display_name, p.score.toString(),
+        p.correct_answers.toString(), p.wrong_answers.toString(), `${accuracy}%`,
+        formatTimestamp(p.joined_at),
       ]
-      
       report.customFields?.forEach((f: any) => {
         const resp = p.custom_field_responses?.find((r: any) => r.field_id === f.id)
-        row.push(resp?.value || '-')
+        row.push(cleanFieldValue(resp?.value ?? '') || '-')
       })
-      
       return row
     })
-    
     exportToCSV(headers, rows, `${report.session.quiz?.title || 'Quiz'}`)
   }
 
@@ -242,6 +347,7 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
   if (selectedSessionId) {
     return (
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => setSelectedSessionId(null)} className="p-2">
@@ -265,7 +371,7 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
           </div>
           {report && (
             <Button variant="outline" leftIcon={<Download className="w-4 h-4" />} onClick={handleExportReport}>
-              Export CSV
+              Export {activeFilterCount > 0 ? '(Filtered)' : 'CSV'}
             </Button>
           )}
         </div>
@@ -274,62 +380,207 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
           <Card><div className="flex justify-center py-20"><Spinner /></div></Card>
         ) : (
           <div className="space-y-6">
+            {/* Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <StatCard icon={<Users className="w-6 h-6 text-cyan-400" />} label="Participants" value={report.participants.length} color="rgba(6,182,212,0.1)" />
               <StatCard icon={<Award className="w-6 h-6 text-yellow-400" />} label="Average Score" value={`${report.participants.length > 0 ? Math.round(report.participants.reduce((acc: number, p: any) => acc + p.score, 0) / report.participants.length) : 0} pts`} color="rgba(234,179,8,0.1)" />
               <StatCard
                 icon={<CheckCircle2 className="w-6 h-6 text-green-400" />}
                 label="Passing Rate"
-                value={`${
-                  report.participants.length > 0
-                    ? Math.round(
-                        (report.participants.filter((p: any) => {
-                          const totalQ = report.session.quiz?.question_count ?? 1
-                          const scorePercent = (p.correct_answers / totalQ) * 100
-                          return scorePercent >= (report.session.quiz?.passing_score ?? 60)
-                        }).length /
-                          report.participants.length) *
-                          100
-                      )
-                    : 0
-                }%`}
+                value={`${report.participants.length > 0 ? Math.round((report.participants.filter((p: any) => {
+                  const totalQ = report.session.quiz?.question_count ?? 1
+                  return (p.correct_answers / totalQ) * 100 >= (report.session.quiz?.passing_score ?? 60)
+                }).length / report.participants.length) * 100) : 0}%`}
                 color="rgba(34,197,94,0.1)"
               />
               <StatCard icon={<Award className="w-6 h-6 text-pink-400" />} label="Top Scorer" value={report.participants[0]?.display_name || '-'} color="rgba(249,40,184,0.1)" />
             </div>
 
+            {/* Search, Sort & Filter bar */}
+            <Card>
+              <div className="space-y-4">
+                {/* Row 1: Search + Sort */}
+                <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-theme-secondary" />
+                    <input
+                      type="text"
+                      placeholder="Search by name, email, college..."
+                      value={detailSearch}
+                      onChange={e => { setDetailSearch(e.target.value); setDetailPage(1) }}
+                      className="input-field pl-10 w-full"
+                    />
+                    {detailSearch && (
+                      <button onClick={() => { setDetailSearch(''); setDetailPage(1) }} className="absolute right-3 top-1/2 -translate-y-1/2 text-theme-secondary hover:text-theme-primary">
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <SlidersHorizontal className="w-4 h-4 text-theme-secondary" />
+                    <span className="text-xs text-theme-secondary font-semibold">Sort:</span>
+                    <button onClick={() => { setSortConfig({ key: 'score', direction: 'desc' }); setDetailPage(1) }} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${sortConfig.key === 'score' ? 'bg-brand-500/20 text-brand-400 ring-1 ring-brand-500/40' : 'bg-white/5 text-theme-secondary hover:text-theme-primary'}`}>
+                      <Trophy className="w-3 h-3" /> Score
+                    </button>
+                    <button onClick={() => { 
+                      setSortConfig(prev => ({
+                        key: 'student',
+                        direction: prev.key === 'student' ? (prev.direction === 'asc' ? 'desc' : 'asc') : 'asc'
+                      }));
+                      setDetailPage(1);
+                    }} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${sortConfig.key === 'student' ? 'bg-brand-500/20 text-brand-400 ring-1 ring-brand-500/40' : 'bg-white/5 text-theme-secondary hover:text-theme-primary'}`}>
+                      {sortConfig.key === 'student' ? (sortConfig.direction === 'asc' ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />) : <ArrowUpDown className="w-3 h-3" />} A–Z
+                    </button>
+                    <button onClick={() => { setSortConfig({ key: 'joined_at', direction: 'asc' }); setDetailPage(1) }} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${sortConfig.key === 'joined_at' ? 'bg-brand-500/20 text-brand-400 ring-1 ring-brand-500/40' : 'bg-white/5 text-theme-secondary hover:text-theme-primary'}`}>
+                      <Clock className="w-3 h-3" /> Time
+                    </button>
+                  </div>
+                  {(activeFilterCount > 0 || detailSearch || sortConfig.key !== 'score') && (
+                    <button onClick={clearAllFilters} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-danger-500/10 text-danger-400 hover:bg-danger-500/20 transition-all shrink-0">
+                      <X className="w-3 h-3" /> Clear All
+                    </button>
+                  )}
+                </div>
+
+                {/* Smart filter dropdowns — one per filterable field */}
+                {Object.keys(fieldUniqueValues).length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-theme-secondary shrink-0">Filter:</span>
+                    {Object.entries(fieldUniqueValues).map(([fieldId, values]) => {
+                      const field = report.customFields?.find((f: any) => f.id === fieldId)
+                      if (!field || (values as string[]).length === 0) return null
+                      const activeVal = fieldFilters[fieldId] || ''
+                      const count = activeVal
+                        ? report.participants.filter((p: any) => {
+                            const resp = p.custom_field_responses?.find((r: any) => r.field_id === fieldId)
+                            return cleanFieldValue(resp?.value ?? '') === activeVal
+                          }).length
+                        : null
+                      return (
+                        <div key={fieldId} className="relative group">
+                          <select
+                            value={activeVal}
+                            onChange={e => { setFieldFilters(prev => ({ ...prev, [fieldId]: e.target.value })); setDetailPage(1) }}
+                            className={`
+                              appearance-none pl-3 pr-8 py-1.5 rounded-xl text-xs font-semibold
+                              border transition-all cursor-pointer outline-none
+                              bg-white/5 hover:bg-white/10
+                              ${activeVal
+                                ? 'border-brand-500 text-brand-300 ring-1 ring-brand-500/40 bg-brand-500/10'
+                                : 'border-white/10 text-theme-secondary hover:border-white/20'
+                              }
+                            `}
+                          >
+                            <option value="" className="bg-neutral-900 text-white">
+                              {field.label} — All ({report.participants.length})
+                            </option>
+                            {(values as string[]).map((val: string) => {
+                              const c = report.participants.filter((p: any) => {
+                                const resp = p.custom_field_responses?.find((r: any) => r.field_id === fieldId)
+                                return cleanFieldValue(resp?.value ?? '') === val
+                              }).length
+                              return (
+                                <option key={val} value={val} className="bg-neutral-900 text-white">
+                                  {val} ({c})
+                                </option>
+                              )
+                            })}
+                          </select>
+                          {/* Custom dropdown arrow */}
+                          <div className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 transition-colors ${activeVal ? 'text-brand-400' : 'text-theme-secondary'}`}>
+                            <svg width="10" height="6" viewBox="0 0 10 6" fill="none">
+                              <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                          {/* Active badge */}
+                          {activeVal && count !== null && (
+                            <span className="absolute -top-1.5 -right-1.5 bg-brand-500 text-white text-[9px] font-black rounded-full w-4 h-4 flex items-center justify-center shadow-lg">
+                              {count}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {filteredParticipants.length !== report.participants.length && (
+                  <div className="flex items-center gap-2 text-xs text-brand-400 font-semibold bg-brand-500/10 px-3 py-2 rounded-lg">
+                    <Search className="w-3.5 h-3.5" />
+                    Showing {filteredParticipants.length} of {report.participants.length} students
+                    {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount > 1 ? 's' : ''} active`}
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Main table */}
             <Card padding="none">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-theme text-theme-secondary text-xs font-bold uppercase">
+                    <tr className="border-b border-theme text-theme-secondary text-xs font-bold uppercase select-none">
                       <th className="py-3 px-4">Rank</th>
-                      <th className="py-3 px-4">Student</th>
-                      <th className="py-3 px-4 text-right">Score</th>
-                      <th className="py-3 px-4 text-center">Correct</th>
-                      <th className="py-3 px-4 text-center">Wrong</th>
-                      <th className="py-3 px-4 text-right">Accuracy</th>
-                      {report.customFields?.map((f: any) => (
-                        <th key={f.id} className="py-3 px-4 min-w-[120px]">{f.label}</th>
-                      ))}
+                      {(() => {
+                        const renderSortHeader = (key: string, label: string, align: 'left' | 'center' | 'right' = 'left') => {
+                          const isSorted = sortConfig.key === key
+                          const isAsc = sortConfig.direction === 'asc'
+                          const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+                          return (
+                            <th 
+                              className={`py-3 px-4 cursor-pointer hover:text-brand-400 transition-colors ${alignClass}`}
+                              onClick={() => {
+                                setSortConfig(prev => ({
+                                  key,
+                                  direction: prev.key === key ? (prev.direction === 'asc' ? 'desc' : 'asc') : 'desc'
+                                }))
+                                setDetailPage(1)
+                              }}
+                            >
+                              <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start'}`}>
+                                <span>{label}</span>
+                                <span className={`text-[10px] ${isSorted ? 'text-brand-400 font-extrabold' : 'text-white/20'}`}>
+                                  {isSorted ? (isAsc ? '▲' : '▼') : '▲▼'}
+                                </span>
+                              </div>
+                            </th>
+                          )
+                        }
+
+                        return (
+                          <>
+                            {renderSortHeader('student', 'Student')}
+                            {renderSortHeader('score', 'Score', 'right')}
+                            {renderSortHeader('correct', 'Correct', 'center')}
+                            {renderSortHeader('wrong', 'Wrong', 'center')}
+                            {renderSortHeader('accuracy', 'Accuracy', 'right')}
+                            {renderSortHeader('joined_at', 'Joined At')}
+                            {report.customFields?.map((f: any) => renderSortHeader(f.id, f.label))}
+                          </>
+                        )
+                      })()}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-theme/40 text-sm">
-                    {report.participants.length === 0 ? (
+                    {filteredParticipants.length === 0 ? (
                       <tr>
-                        <td colSpan={6 + (report.customFields?.length ?? 0)} className="text-center py-8 text-theme-secondary">
-                          No students attended this session.
+                        <td colSpan={7 + (report.customFields?.length ?? 0)} className="text-center py-12 text-theme-secondary">
+                          <div className="flex flex-col items-center gap-2">
+                            <Search className="w-8 h-8 opacity-30" />
+                            <p className="font-semibold">No students match your search</p>
+                            <button onClick={clearAllFilters} className="text-brand-400 text-xs underline">Clear filters</button>
+                          </div>
                         </td>
                       </tr>
                     ) : (
-                      report.participants.slice((detailPage - 1) * detailPageSize, detailPage * detailPageSize).map((p: any, idx: number) => {
+                      filteredParticipants.slice((detailPage - 1) * detailPageSize, detailPage * detailPageSize).map((p: any, idx: number) => {
+                        const originalRank = report.participants.findIndex((op: any) => op.id === p.id)
                         const totalQ = report.session.quiz?.question_count ?? 0
                         const accuracy = totalQ > 0 ? Math.round((p.correct_answers / totalQ) * 100) : 0
+                        const rankLabel = originalRank === 0 ? '🥇' : originalRank === 1 ? '🥈' : originalRank === 2 ? '🥉' : `#${originalRank + 1}`
                         return (
                           <tr key={p.id} className="hover:bg-white/5 transition-colors">
-                            <td className="py-3 px-4 font-bold text-theme-primary">
-                              {(detailPage - 1) * detailPageSize + idx === 0 ? '🥇' : (detailPage - 1) * detailPageSize + idx === 1 ? '🥈' : (detailPage - 1) * detailPageSize + idx === 2 ? '🥉' : `#${(detailPage - 1) * detailPageSize + idx + 1}`}
-                            </td>
+                            <td className="py-3 px-4 font-bold text-theme-primary">{rankLabel}</td>
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-3">
                                 <Avatar seed={p.avatar_seed} size="xs" />
@@ -340,15 +591,30 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
                             <td className="py-3 px-4 text-center text-success-400 font-semibold">{p.correct_answers}</td>
                             <td className="py-3 px-4 text-center text-danger-400 font-semibold">{p.wrong_answers}</td>
                             <td className="py-3 px-4 text-right">
-                              <Badge variant={accuracy >= 80 ? 'success' : accuracy >= 50 ? 'warning' : 'danger'}>
-                                {accuracy}%
-                              </Badge>
+                              <Badge variant={accuracy >= 80 ? 'success' : accuracy >= 50 ? 'warning' : 'danger'}>{accuracy}%</Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex flex-col">
+                                <span className="text-theme-secondary text-xs font-medium">{formatTimestamp(p.joined_at)}</span>
+                                <span className="text-white/30 text-[10px]">{timeAgo(p.joined_at)}</span>
+                              </div>
                             </td>
                             {report.customFields?.map((f: any) => {
                               const resp = p.custom_field_responses?.find((r: any) => r.field_id === f.id)
+                              const val = cleanFieldValue(resp?.value ?? '')
+                              const isFilterActive = fieldFilters[f.id] && fieldFilters[f.id] === val
                               return (
-                                <td key={f.id} className="py-3 px-4 text-theme-secondary font-medium">
-                                  {resp?.value || <span className="text-white/20 italic">Not filled</span>}
+                                <td key={f.id} className="py-3 px-4">
+                                  {val
+                                    ? <span
+                                        onClick={() => { if (fieldUniqueValues[f.id]) { setFieldFilters(prev => ({ ...prev, [f.id]: prev[f.id] === val ? '' : val })); setDetailPage(1) } }}
+                                        className={`inline-block font-medium text-theme-secondary transition-all ${fieldUniqueValues[f.id] ? 'cursor-pointer hover:text-brand-400' : ''} ${isFilterActive ? 'text-brand-400' : ''}`}
+                                        title={fieldUniqueValues[f.id] ? `Click to filter by "${val}"` : undefined}
+                                      >
+                                        {val}
+                                      </span>
+                                    : <span className="text-white/20 italic text-xs">Not filled</span>
+                                  }
                                 </td>
                               )
                             })}
@@ -360,49 +626,20 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
                 </table>
               </div>
 
-              {/* Detail Report Pagination */}
-              {report.participants.length > 0 && (
+              {filteredParticipants.length > 0 && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-theme">
                   <div className="flex items-center gap-2 text-sm text-theme-secondary">
                     <span>Show</span>
-                    <select
-                      value={detailPageSize}
-                      onChange={e => {
-                        setDetailPageSize(Number(e.target.value))
-                        setDetailPage(1)
-                      }}
-                      className="bg-white/5 border border-theme rounded-lg px-2 py-1 text-theme-primary focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    >
-                      {[10, 30, 50].map(size => (
-                        <option key={size} value={size} className="bg-neutral-900 text-white">
-                          {size}
-                        </option>
-                      ))}
+                    <select value={detailPageSize} onChange={e => { setDetailPageSize(Number(e.target.value)); setDetailPage(1) }} className="bg-white/5 border border-theme rounded-lg px-2 py-1 text-theme-primary focus:outline-none focus:ring-1 focus:ring-brand-500">
+                      {[10, 30, 50].map(size => <option key={size} value={size} className="bg-neutral-900 text-white">{size}</option>)}
                     </select>
                     <span>entries per page</span>
                   </div>
-
                   <div className="flex items-center gap-4">
-                    <span className="text-sm text-theme-secondary">
-                      Page <strong>{detailPage}</strong> of <strong>{Math.ceil(report.participants.length / detailPageSize) || 1}</strong> ({report.participants.length} entries)
-                    </span>
+                    <span className="text-sm text-theme-secondary">Page <strong>{detailPage}</strong> of <strong>{Math.ceil(filteredParticipants.length / detailPageSize) || 1}</strong> ({filteredParticipants.length} entries)</span>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDetailPage(p => Math.max(1, p - 1))}
-                        disabled={detailPage === 1}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setDetailPage(p => Math.min(Math.ceil(report.participants.length / detailPageSize), p + 1))}
-                        disabled={detailPage === Math.ceil(report.participants.length / detailPageSize) || Math.ceil(report.participants.length / detailPageSize) === 0}
-                      >
-                        Next
-                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setDetailPage(p => Math.max(1, p - 1))} disabled={detailPage === 1}>Previous</Button>
+                      <Button variant="outline" size="sm" onClick={() => setDetailPage(p => Math.min(Math.ceil(filteredParticipants.length / detailPageSize), p + 1))} disabled={detailPage === Math.ceil(filteredParticipants.length / detailPageSize) || Math.ceil(filteredParticipants.length / detailPageSize) === 0}>Next</Button>
                     </div>
                   </div>
                 </div>
