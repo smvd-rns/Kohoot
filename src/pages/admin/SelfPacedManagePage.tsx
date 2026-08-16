@@ -11,7 +11,7 @@ import toast from 'react-hot-toast'
 import type { QuizSession, SessionParticipant, Question } from '@/types'
 
 // ── Countdown to deadline ─────────────────────────────────────────────────────
-function DeadlineCountdown({ deadline }: { deadline: string }) {
+function DeadlineCountdown({ deadline, onEdit }: { deadline: string; onEdit?: () => void }) {
   const [remaining, setRemaining] = useState('')
   const [pct, setPct] = useState(100)
   useEffect(() => {
@@ -33,12 +33,20 @@ function DeadlineCountdown({ deadline }: { deadline: string }) {
   }, [deadline])
   const isUrgent = new Date(deadline).getTime() - Date.now() < 3600000
   return (
-    <div className={cn('glass rounded-2xl p-4 text-center', isUrgent && 'border border-danger-500/40')}>
+    <div className={cn('glass rounded-2xl p-4 text-center relative group', isUrgent && 'border border-danger-500/40')}>
       <p className="text-xs text-theme-secondary mb-1 flex items-center justify-center gap-1">
         <Clock className="w-3 h-3" /> Time Remaining
       </p>
       <p className={cn('text-2xl font-black', isUrgent ? 'text-danger-400' : 'text-theme-primary')}>{remaining}</p>
       <p className="text-xs text-theme-secondary mt-1">Deadline: {new Date(deadline).toLocaleString()}</p>
+      {onEdit && (
+        <button
+          onClick={onEdit}
+          className="absolute top-3 right-3 text-xs bg-white/10 hover:bg-white/20 text-theme-primary px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1"
+        >
+          <Clock className="w-3.5 h-3.5" /> Edit
+        </button>
+      )}
     </div>
   )
 }
@@ -54,6 +62,42 @@ export default function SelfPacedManagePage() {
   const [qrModal, setQrModal] = useState(false)
   const [confirmEnd, setConfirmEnd] = useState(false)
   const [ending, setEnding] = useState(false)
+
+  const [deadlineModalOpen, setDeadlineModalOpen] = useState(false)
+  const [editDeadlineVal, setEditDeadlineVal] = useState('')
+  const [updatingDeadline, setUpdatingDeadline] = useState(false)
+
+  const handleOpenDeadlineModal = (s: QuizSession) => {
+    if (s.deadline) {
+      const d = new Date(s.deadline)
+      const tzOffset = d.getTimezoneOffset() * 60000
+      const localISOTime = new Date(d.getTime() - tzOffset).toISOString().slice(0, 16)
+      setEditDeadlineVal(localISOTime)
+    } else {
+      setEditDeadlineVal('')
+    }
+    setDeadlineModalOpen(true)
+  }
+
+  const handleUpdateDeadline = async () => {
+    if (!session) return
+    if (!editDeadlineVal) {
+      toast.error('Please set a valid deadline')
+      return
+    }
+    setUpdatingDeadline(true)
+    try {
+      const updatedDl = new Date(editDeadlineVal).toISOString()
+      await quizService.updateSessionDeadline(session.id, updatedDl)
+      setSession(prev => prev ? { ...prev, deadline: updatedDl } : null)
+      setDeadlineModalOpen(false)
+      toast.success('Deadline updated successfully!')
+    } catch {
+      toast.error('Failed to update deadline')
+    } finally {
+      setUpdatingDeadline(false)
+    }
+  }
 
   const load = useCallback(async () => {
     if (!sessionId) return
@@ -150,7 +194,7 @@ export default function SelfPacedManagePage() {
       </div>
 
       {/* Deadline countdown */}
-      {session.deadline && <DeadlineCountdown deadline={session.deadline} />}
+      {session.deadline && <DeadlineCountdown deadline={session.deadline} onEdit={() => handleOpenDeadlineModal(session)} />}
 
       {/* Student progress list */}
       <Card padding="none">
@@ -229,6 +273,30 @@ export default function SelfPacedManagePage() {
           <Button variant="danger" isLoading={ending} leftIcon={<XCircle className="w-4 h-4" />} onClick={handleEndSession}>
             Close Session
           </Button>
+        </div>
+      </Modal>
+
+      {/* Edit Deadline modal */}
+      <Modal open={deadlineModalOpen} onClose={() => setDeadlineModalOpen(false)} title="Edit Session Deadline" size="sm">
+        <div className="space-y-4">
+          <div>
+            <label className="label-text block mb-1.5 font-bold">New Deadline</label>
+            <input
+              type="datetime-local"
+              value={editDeadlineVal}
+              onChange={e => setEditDeadlineVal(e.target.value)}
+              className="input-field w-full"
+            />
+            <p className="text-xs text-theme-secondary mt-1">
+              You can extend the deadline. Students will be able to play/resume until this time.
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <Button variant="outline" className="flex-1" onClick={() => setDeadlineModalOpen(false)}>Cancel</Button>
+            <Button className="flex-1" isLoading={updatingDeadline} onClick={handleUpdateDeadline}>
+              Save Deadline
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>

@@ -288,6 +288,23 @@ export const quizService = {
     return data
   },
 
+  async updateSessionDeadline(id: string, deadline: string | null) {
+    const updates: Record<string, any> = { deadline }
+    if (deadline && new Date(deadline).getTime() > Date.now()) {
+      updates.status = 'self_paced'
+      updates.ended_at = null
+    }
+    const { data, error } = await supabase
+      .from('quiz_sessions')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) throw error
+    return data
+  },
+
+
   async advanceQuestion(sessionId: string, index: number) {
     const { error } = await supabase
       .from('quiz_sessions')

@@ -28,6 +28,42 @@ export default function SessionsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
+  const [deadlineModalSession, setDeadlineModalSession] = useState<QuizSession | null>(null)
+  const [editDeadlineVal, setEditDeadlineVal] = useState('')
+  const [updatingDeadline, setUpdatingDeadline] = useState(false)
+
+  const handleOpenDeadlineModal = (s: QuizSession) => {
+    setDeadlineModalSession(s)
+    if (s.deadline) {
+      const d = new Date(s.deadline)
+      const tzOffset = d.getTimezoneOffset() * 60000
+      const localISOTime = new Date(d.getTime() - tzOffset).toISOString().slice(0, 16)
+      setEditDeadlineVal(localISOTime)
+    } else {
+      setEditDeadlineVal('')
+    }
+  }
+
+  const handleUpdateDeadline = async () => {
+    if (!deadlineModalSession) return
+    if (!editDeadlineVal) {
+      toast.error('Please set a valid deadline')
+      return
+    }
+    setUpdatingDeadline(true)
+    try {
+      const updatedDl = new Date(editDeadlineVal).toISOString()
+      const updatedSession = await quizService.updateSessionDeadline(deadlineModalSession.id, updatedDl)
+      setSessions(prev => prev.map(x => x.id === deadlineModalSession.id ? { ...x, ...updatedSession } : x))
+      setDeadlineModalSession(null)
+      toast.success('Deadline updated successfully!')
+    } catch {
+      toast.error('Failed to update deadline')
+    } finally {
+      setUpdatingDeadline(false)
+    }
+  }
+
   useEffect(() => {
     if (!profile?.id) return
     Promise.all([
@@ -108,75 +144,92 @@ export default function SessionsPage() {
                 return (
                   <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
                   <Card hover>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                      {/* Theme icon */}
-                      <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: theme.gradient }}>
-                        {isSelfPaced ? '📋' : theme.emoji}
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <h3 className="font-bold text-theme-primary truncate">{s.quiz?.title ?? 'Quiz'}</h3>
-                          <Badge variant={statusVariant(s.status)}>{statusLabel(s.status)}</Badge>
-                          {isSelfPaced && <Badge variant="warning">📋 Self-Paced</Badge>}
-                          {s.participant_mode === 'registered_only' && <Badge variant="danger">🔒 Registered Only</Badge>}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                      {/* Left: Info & Theme Icon */}
+                      <div className="flex items-center gap-4 min-w-0">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-xl flex-shrink-0" style={{ background: theme.gradient }}>
+                          {isSelfPaced ? '📋' : theme.emoji}
                         </div>
-                        <div className="flex flex-wrap gap-4 text-xs text-theme-secondary">
-                          <span className="flex items-center gap-1"><Users className="w-3 h-3" />{participantCount} participants</span>
-                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{timeAgo(s.created_at)}</span>
-                          {isSelfPaced && s.deadline && (
-                            <span className="flex items-center gap-1 text-warning-400">
-                              <Clock className="w-3 h-3" />Deadline: {new Date(s.deadline).toLocaleDateString()} {new Date(s.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Room code */}
-                      <div className="flex items-center gap-3">
-                        <div className="glass px-4 py-2 rounded-xl text-center">
-                          <p className="text-xs text-theme-secondary mb-0.5">Room Code</p>
-                          <p className="text-2xl font-black text-theme-primary tracking-widest">{s.room_code}</p>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <h3 className="font-bold text-theme-primary truncate text-base">{s.quiz?.title ?? 'Quiz'}</h3>
+                            <Badge variant={statusVariant(s.status)}>{statusLabel(s.status)}</Badge>
+                            {isSelfPaced && <Badge variant="warning">📋 Self-Paced</Badge>}
+                            {s.participant_mode === 'registered_only' && <Badge variant="danger">🔒 Registered Only</Badge>}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-theme-secondary">
+                            <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5 text-theme-secondary/80" />{participantCount} participants</span>
+                            <span className="text-theme-secondary/40">•</span>
+                            <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-theme-secondary/80" />{timeAgo(s.created_at)}</span>
+                            {isSelfPaced && s.deadline && (
+                              <>
+                                <span className="text-theme-secondary/40">•</span>
+                                <span className="flex items-center gap-1 text-warning-400 font-medium">
+                                  <Clock className="w-3.5 h-3.5 text-warning-500/80" />
+                                  <span>Deadline: {new Date(s.deadline).toLocaleDateString()} {new Date(s.deadline).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      {/* Actions */}
-                      <div className="flex gap-2 flex-shrink-0 flex-wrap">
-                        <Button variant="ghost" size="sm" leftIcon={<Link2 className="w-4 h-4" />}
-                          onClick={() => {
-                            copyToClipboard(`${window.location.origin}/student/join?code=${s.room_code}`)
-                            toast.success('Join link copied!')
-                          }}
-                          title="Copy join link"
-                        >
-                          Copy Link
-                        </Button>
-                        <Button variant="ghost" size="sm" leftIcon={<Copy className="w-4 h-4" />}
-                          onClick={() => { copyToClipboard(s.room_code); toast.success('Room code copied!') }}
-                          title="Copy room code"
-                        />
-                        <Button variant="ghost" size="sm" leftIcon={<QrCode className="w-4 h-4" />}
-                          onClick={() => setQrModal(s)} />
-                        {isActive && (
-                          <>
-                            {isSelfPaced ? (
-                              <Button variant="outline" size="sm" leftIcon={<BookOpen className="w-4 h-4" />}
+                      {/* Right: Room Code & Actions */}
+                      <div className="flex flex-wrap items-center gap-4 sm:gap-6 flex-shrink-0">
+                        {/* Room code */}
+                        <div className="glass px-4 py-2 rounded-xl text-center min-w-[120px]">
+                          <p className="text-[10px] uppercase tracking-wider text-theme-secondary font-bold mb-0.5">Room Code</p>
+                          <p className="text-xl font-black text-theme-primary tracking-widest">{s.room_code}</p>
+                        </div>
+
+                        {/* Actions group */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Share & Tool actions */}
+                          <div className="flex items-center bg-white/5 rounded-xl p-1 border border-white/5 gap-0.5">
+                            <Button variant="ghost" size="sm" className="p-2 h-9 w-9" leftIcon={<Link2 className="w-4 h-4" />}
+                              onClick={() => {
+                                copyToClipboard(`${window.location.origin}/student/join?code=${s.room_code}`)
+                                toast.success('Join link copied!')
+                              }}
+                              title="Copy join link"
+                            />
+                            <Button variant="ghost" size="sm" className="p-2 h-9 w-9" leftIcon={<Copy className="w-4 h-4" />}
+                              onClick={() => { copyToClipboard(s.room_code); toast.success('Room code copied!') }}
+                              title="Copy room code"
+                            />
+                            <Button variant="ghost" size="sm" className="p-2 h-9 w-9" leftIcon={<QrCode className="w-4 h-4" />}
+                              onClick={() => setQrModal(s)}
+                              title="Show QR Code"
+                            />
+                            {isSelfPaced && (
+                              <Button variant="ghost" size="sm" className="p-2 h-9 w-9 text-theme-primary hover:text-theme-primary" leftIcon={<Clock className="w-4 h-4" />}
+                                onClick={() => handleOpenDeadlineModal(s)}
+                                title="Edit Deadline"
+                              />
+                            )}
+                            {s.status !== 'completed' && (
+                              <Button variant="ghost" size="sm" className="p-2 h-9 w-9 text-danger-400 hover:text-danger-500 hover:bg-danger-500/10" leftIcon={<XCircle className="w-4 h-4" />}
+                                onClick={() => handleEndSession(s.id)}
+                                title="End Session"
+                              />
+                            )}
+                          </div>
+
+                          {/* Primary action */}
+                          {isActive && (
+                            isSelfPaced ? (
+                              <Button variant="outline" size="sm" className="h-9 px-4 font-semibold" leftIcon={<BookOpen className="w-4 h-4" />}
                                 onClick={() => window.open(`/admin/sessions/${s.id}/self-paced`, '_blank')}>
                                 Monitor
                               </Button>
                             ) : (
-                              <Button variant="outline" size="sm" leftIcon={<MonitorPlay className="w-4 h-4" />}
+                              <Button variant="outline" size="sm" className="h-9 px-4 font-semibold" leftIcon={<MonitorPlay className="w-4 h-4" />}
                                 onClick={() => window.open(`/admin/sessions/${s.id}/host`, '_blank')}>
                                 Host
                               </Button>
-                            )}
-                            <Button variant="danger" size="sm" leftIcon={<XCircle className="w-4 h-4" />}
-                              onClick={() => handleEndSession(s.id)}>
-                              End
-                            </Button>
-                          </>
-                        )}
+                            )
+                          )}
+                        </div>
                       </div>
                     </div>
                   </Card>
@@ -346,6 +399,32 @@ export default function SessionsPage() {
                 className="flex-1"
               >
                 Copy Link
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit Deadline modal */}
+      <Modal open={!!deadlineModalSession} onClose={() => setDeadlineModalSession(null)} title="Edit Session Deadline" size="sm">
+        {deadlineModalSession && (
+          <div className="space-y-4">
+            <div>
+              <label className="label-text block mb-1.5 font-bold">New Deadline</label>
+              <input
+                type="datetime-local"
+                value={editDeadlineVal}
+                onChange={e => setEditDeadlineVal(e.target.value)}
+                className="input-field w-full"
+              />
+              <p className="text-xs text-theme-secondary mt-1">
+                You can extend the deadline. Students will be able to play/resume until this time.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setDeadlineModalSession(null)}>Cancel</Button>
+              <Button className="flex-1" isLoading={updatingDeadline} onClick={handleUpdateDeadline}>
+                Save Deadline
               </Button>
             </div>
           </div>
