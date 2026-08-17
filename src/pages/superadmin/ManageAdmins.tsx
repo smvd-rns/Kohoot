@@ -293,7 +293,7 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
   const exportToCSV = (headers: string[], rows: string[][], filename: string) => {
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(val => `"${(val || '').replace(/"/g, '""')}`).join(','))
+      ...rows.map(row => row.map(val => `"${(val || '').replace(/"/g, '""')}"`).join(','))
     ].join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
