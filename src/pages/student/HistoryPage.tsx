@@ -24,7 +24,7 @@ export default function HistoryPage() {
       ) : (
         <div className="space-y-3">
           <div className="space-y-3">
-            {(history.slice((currentPage - 1) * pageSize, currentPage * pageSize) as Array<{ id: string; score: number; correct_answers: number; wrong_answers: number; joined_at: string; session: { room_code: string; quiz: { title: string; theme: string; question_count?: number } } }>).map((h, i) => {
+            {(history.slice((currentPage - 1) * pageSize, currentPage * pageSize) as Array<{ id: string; score: number; correct_answers: number; wrong_answers: number; joined_at: string; session: { title?: string; room_code: string; quiz: { title: string; theme: string; question_count?: number } } }>).map((h, i) => {
               const theme = getTheme(h.session?.quiz?.theme as never ?? 'modern')
             return (
               <motion.div key={h.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}>
@@ -32,7 +32,7 @@ export default function HistoryPage() {
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0" style={{ background: theme.gradient }}>{theme.emoji}</div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-theme-primary">{h.session?.quiz?.title ?? 'Quiz'}</p>
+                      <p className="font-bold text-theme-primary">{h.session?.title || h.session?.quiz?.title || 'Quiz'}</p>
                       <p className="text-xs text-theme-secondary">{timeAgo(h.joined_at)}</p>
                       <div className="flex gap-3 mt-1 text-xs text-theme-secondary">
                         <span>✅ {h.correct_answers} correct</span>

@@ -13,6 +13,7 @@ import type { QuizSession, Question, LeaderboardEntry } from '@/types'
 const ANSWER_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
 const ANSWER_ICONS = ['▲', '◆', '●', '★']
 import { BACKGROUND_MUSIC } from '@/lib/music'
+import toast from 'react-hot-toast'
 
 export default function HostSessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -26,7 +27,7 @@ export default function HostSessionPage() {
   const [answers, setAnswers] = useState<{ participant_id: string; selected_option_ids: string[] }[]>([])
   
   const [timeLeft, setTimeLeft] = useState(0)
-  const [hostState, setHostState] = useState<'lobby' | 'question' | 'results' | 'leaderboard' | 'completed'>('lobby')
+  const [hostState, setHostState] = useState<'lobby' | 'question' | 'results' | 'leaderboard' | 'completed' | 'transit'>('lobby')
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [musicUrl, setMusicUrl] = useState('')
@@ -57,8 +58,9 @@ export default function HostSessionPage() {
         setMusicUrl(BACKGROUND_MUSIC[1].url) // Default to upbeat
       }
 
-      const qs = await quizService.getQuestions(s.quiz_id)
-      setQuestions(qs)
+       const activeQuizId = s.current_quiz_id || s.quiz_id
+       const qs = await quizService.getQuestions(activeQuizId)
+       setQuestions(qs)
       
       if (s.status === 'completed') {
         setHostState('completed')
@@ -167,9 +169,15 @@ export default function HostSessionPage() {
     if (!session) return
     const nextIdx = (session.current_question_index ?? 0) + 1
     if (nextIdx >= questions.length) {
-      await quizService.updateSessionStatus(session.id, 'completed')
-      setHostState('completed')
-      broadcastState('completed')
+      const currentQuizIdx = session.quiz_ids?.indexOf(session.current_quiz_id ?? '') ?? -1
+      if (session.quiz_ids && currentQuizIdx !== -1 && currentQuizIdx < session.quiz_ids.length - 1) {
+        setHostState('transit')
+        broadcastState('transit')
+      } else {
+        await quizService.updateSessionStatus(session.id, 'completed')
+        setHostState('completed')
+        broadcastState('completed')
+      }
     } else {
       await quizService.advanceQuestion(session.id, nextIdx)
       setSession({ ...session, current_question_index: nextIdx })
@@ -178,6 +186,37 @@ export default function HostSessionPage() {
       setAnswers([])
       setHostState('question')
       broadcastState('question')
+    }
+  }
+
+  const handleStartNextQuiz = async () => {
+    if (!session) return
+    const currentQuizIdx = session.quiz_ids?.indexOf(session.current_quiz_id ?? '') ?? -1
+    const nextQuizId = session.quiz_ids?.[currentQuizIdx + 1]
+    if (!nextQuizId) return
+
+    setLoading(true)
+    try {
+      await quizService.updateQuiz(nextQuizId, { is_published: true })
+      const updatedSession = await quizService.transitionToNextQuiz(session.id, nextQuizId)
+      
+      const qs = await quizService.getQuestions(nextQuizId)
+      setQuestions(qs)
+      setSession(updatedSession as unknown as QuizSession)
+      
+      if (updatedSession.quiz?.background_music_url) {
+        setMusicUrl(updatedSession.quiz.background_music_url)
+      }
+
+      setCurrentQ(qs[0])
+      setTimeLeft(qs[0]?.time_limit ?? 30)
+      setAnswers([])
+      setHostState('question')
+      broadcastState('question')
+    } catch {
+      toast.error('Failed to transition to the next quiz')
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -329,9 +368,11 @@ export default function HostSessionPage() {
           <Button size="lg" rightIcon={<BarChart2 className="w-5 h-5" />} onClick={handleShowLeaderboard}>
             Next (Leaderboard)
           </Button>
+        ) : hostState === 'transit' ? (
+          null
         ) : (
           <Button size="lg" rightIcon={<ChevronRight className="w-5 h-5" />} onClick={handleNextQuestion}>
-            Next Question
+            {((session.current_question_index ?? 0) + 1 >= questions.length) ? 'Next Quiz' : 'Next Question'}
           </Button>
         )}
       </div>
@@ -356,6 +397,33 @@ export default function HostSessionPage() {
                 <span className="text-2xl font-black text-brand-400">{e.score.toLocaleString()}</span>
               </motion.div>
             ))}
+          </div>
+        ) : hostState === 'transit' ? (
+          <div className="w-full max-w-xl flex flex-col items-center justify-center text-center p-8 glass-strong rounded-3xl border border-white/10 shadow-2xl space-y-6 flex-1 my-8">
+            <div className="text-7xl animate-bounce">📢</div>
+            <h2 className="text-4xl font-black text-theme-primary">Time for the Next Quiz!</h2>
+            {session && (
+              <div className="space-y-4 w-full">
+                <p className="text-theme-secondary text-sm">
+                  The previous quiz is complete. Up next is the next challenge!
+                </p>
+                {(() => {
+                  const currentQuizIdx = session.quiz_ids?.indexOf(session.current_quiz_id ?? '') ?? -1
+                  return (
+                    <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
+                      {session.transition_messages && (
+                        <p className="text-sm italic text-brand-300 font-semibold leading-relaxed">
+                          "{session.transition_messages[currentQuizIdx] || 'Get ready, the next quiz is starting!'}"
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
+                <Button size="xl" className="w-full" leftIcon={<Play className="w-5 h-5" />} onClick={handleStartNextQuiz}>
+                  Start Next Quiz
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="w-full max-w-4xl flex flex-col items-center relative">

@@ -33,6 +33,8 @@ type ReportData = {
   session: QuizSession & { quiz?: { title: string; description?: string; thumbnail_url?: string; theme?: string; question_count: number; passing_score: number } }
   customFields: CustomField[]
   participants: ParticipantWithResponses[]
+  quizzes?: Array<{ id: string; title: string }>
+  answers?: any[]
 }
 
 type SortConfig = {
@@ -261,14 +263,37 @@ export default function ReportsPage() {
   const handleExportReport = () => {
     if (!report) return
     const customHeaders = report.customFields.map(f => f.label)
-    const headers = ['Rank', 'Participant Name', 'Score', 'Correct Answers', 'Wrong Answers', 'Accuracy (%)', 'Joined At', ...customHeaders]
+    
+    const isMultiQuiz = report.quizzes && report.quizzes.length > 1
+    const quizHeaders = isMultiQuiz ? report.quizzes!.map(q => `${q.title} Score`) : []
+    
+    const headers = [
+      'Rank', 
+      'Participant Name', 
+      ...quizHeaders,
+      isMultiQuiz ? 'Total Score' : 'Score', 
+      'Correct Answers', 
+      'Wrong Answers', 
+      'Accuracy (%)', 
+      'Joined At', 
+      ...customHeaders
+    ]
 
     const rows = filteredParticipants.map((p, idx) => {
       const totalQuestions = report.session.quiz?.question_count ?? 0
       const accuracy = totalQuestions > 0 ? Math.round((p.correct_answers / totalQuestions) * 100) : 0
+      
+      const quizScores = isMultiQuiz ? report.quizzes!.map(quiz => {
+        const score = report.answers
+          ?.filter(a => a.participant_id === p.id && a.question?.quiz_id === quiz.id)
+          ?.reduce((sum, a) => sum + a.points_earned, 0) ?? 0
+        return `${score} pts`
+      }) : []
+
       const row = [
         (idx + 1).toString(),
         p.display_name,
+        ...quizScores,
         p.score.toString(),
         p.correct_answers.toString(),
         p.wrong_answers.toString(),
@@ -427,7 +452,7 @@ export default function ReportsPage() {
                                 <div className="flex items-center gap-3">
                                   <span className="text-xl bg-white/5 p-1.5 rounded-lg">{theme.emoji}</span>
                                   <div>
-                                    <p className="font-bold text-theme-primary">{s.quiz?.title || 'Quiz'}</p>
+                                    <p className="font-bold text-theme-primary">{s.title || s.quiz?.title || 'Quiz'}</p>
                                     {s.quiz?.category && <p className="text-xs text-theme-secondary font-medium mt-0.5">{s.quiz.category}</p>}
                                   </div>
                                 </div>
@@ -564,7 +589,7 @@ export default function ReportsPage() {
                 </Button>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h1 className="text-2xl font-black text-theme-primary">{report.session.quiz?.title} Report</h1>
+                    <h1 className="text-2xl font-black text-theme-primary">{report.session.title || report.session.quiz?.title} Report</h1>
                     <Badge variant={report.session.mode === 'self_paced' ? 'warning' : 'info'}>
                       {report.session.mode === 'self_paced' ? '📋 Self-Paced' : '🎮 Live'}
                     </Badge>
@@ -758,10 +783,16 @@ export default function ReportsPage() {
                           )
                         }
 
+                        const isMultiQuiz = report.quizzes && report.quizzes.length > 1
                         return (
                           <>
                             {renderSortHeader('student', 'Student')}
-                            {renderSortHeader('score', 'Score', 'right')}
+                            {isMultiQuiz && report.quizzes?.map(q => (
+                              <th key={q.id} className="py-3 px-4 text-right select-none text-theme-secondary text-xs font-bold uppercase">
+                                <span title={q.title}>{q.title.length > 12 ? q.title.slice(0, 12) + '...' : q.title}</span>
+                              </th>
+                            ))}
+                            {renderSortHeader('score', isMultiQuiz ? 'Total Score' : 'Score', 'right')}
                             {renderSortHeader('correct', 'Correct', 'center')}
                             {renderSortHeader('wrong', 'Wrong', 'center')}
                             {renderSortHeader('accuracy', 'Accuracy', 'right')}
@@ -775,7 +806,7 @@ export default function ReportsPage() {
                   <tbody className="divide-y divide-theme/40 text-sm">
                     {filteredParticipants.length === 0 ? (
                       <tr>
-                        <td colSpan={7 + report.customFields.length} className="text-center py-12 text-theme-secondary">
+                        <td colSpan={7 + report.customFields.length + (report.quizzes && report.quizzes.length > 1 ? report.quizzes.length : 0)} className="text-center py-12 text-theme-secondary">
                           <div className="flex flex-col items-center gap-2">
                             <Search className="w-8 h-8 opacity-30" />
                             <p className="font-semibold">No students match your search</p>
@@ -801,6 +832,16 @@ export default function ReportsPage() {
                                 <span className="font-semibold text-theme-primary">{p.display_name}</span>
                               </div>
                             </td>
+                            {report.quizzes && report.quizzes.length > 1 && report.quizzes.map(quiz => {
+                              const score = report.answers
+                                ?.filter(a => a.participant_id === p.id && a.question?.quiz_id === quiz.id)
+                                ?.reduce((sum, a) => sum + a.points_earned, 0) ?? 0
+                              return (
+                                <td key={quiz.id} className="py-3 px-4 text-right font-semibold text-brand-400">
+                                  {score} pts
+                                </td>
+                              )
+                            })}
                             <td className="py-3 px-4 text-right font-bold text-theme-primary">{p.score} pts</td>
                             <td className="py-3 px-4 text-center text-success-400 font-semibold">{p.correct_answers}</td>
                             <td className="py-3 px-4 text-center text-danger-400 font-semibold">{p.wrong_answers}</td>

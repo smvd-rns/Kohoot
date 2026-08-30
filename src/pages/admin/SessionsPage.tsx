@@ -28,6 +28,12 @@ export default function SessionsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
+  // Multi-quiz states
+  const [isMultiQuiz, setIsMultiQuiz] = useState(false)
+  const [selectedQuizIds, setSelectedQuizIds] = useState<string[]>([])
+  const [transitionMessages, setTransitionMessages] = useState<string[]>([])
+  const [sessionTitle, setSessionTitle] = useState('')
+
   const [deadlineModalSession, setDeadlineModalSession] = useState<QuizSession | null>(null)
   const [editDeadlineVal, setEditDeadlineVal] = useState('')
   const [updatingDeadline, setUpdatingDeadline] = useState(false)
@@ -82,20 +88,29 @@ export default function SessionsPage() {
   }, [profile?.id, quizIdFromUrl])
 
   const handleCreate = async () => {
-    if (!profile?.id || !selectedQuizId) return
+    if (!profile?.id) return
+    const quizId = isMultiQuiz ? selectedQuizIds[0] : selectedQuizId
+    if (!quizId) {
+      toast.error('Please select at least one quiz')
+      return
+    }
     if (sessionMode === 'self_paced' && !deadline) {
       toast.error('Please set a deadline for self-paced mode')
       return
     }
     setCreating(true)
     try {
-      const session = await quizService.createSession(selectedQuizId, profile.id, {
+      const session = await quizService.createSession(quizId, profile.id, {
         mode: sessionMode,
         deadline: sessionMode === 'self_paced' ? new Date(deadline).toISOString() : undefined,
         participantMode: participantMode,
+        quizIds: isMultiQuiz ? selectedQuizIds : [selectedQuizId],
+        transitionMessages: isMultiQuiz ? transitionMessages : [],
+        title: sessionTitle.trim() || undefined,
       })
       setSessions(s => [session as unknown as QuizSession, ...s])
       setCreateModal(false)
+      setSessionTitle('')
       toast.success(`Session created! Room code: ${session.room_code}`)
     } catch { toast.error('Failed to create session') } finally { setCreating(false) }
   }
@@ -152,7 +167,7 @@ export default function SessionsPage() {
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <h3 className="font-bold text-theme-primary truncate text-base">{s.quiz?.title ?? 'Quiz'}</h3>
+                            <h3 className="font-bold text-theme-primary truncate text-base">{s.title || s.quiz?.title || 'Quiz'}</h3>
                             <Badge variant={statusVariant(s.status)}>{statusLabel(s.status)}</Badge>
                             {isSelfPaced && <Badge variant="warning">📋 Self-Paced</Badge>}
                             {s.participant_mode === 'registered_only' && <Badge variant="danger">🔒 Registered Only</Badge>}
@@ -292,13 +307,101 @@ export default function SessionsPage() {
       {/* Create session modal */}
       <Modal open={createModal} onClose={() => setCreateModal(false)} title="New Session" size="sm">
         <div className="space-y-4">
-          <Select
-            label="Select Quiz"
-            value={selectedQuizId}
-            onChange={e => setSelectedQuizId(e.target.value)}
-            options={quizzes.filter(q => q.is_published).map(q => ({ value: q.id, label: q.title }))}
-            placeholder="Select a quiz..."
+          <Input
+            label="Session Name (Optional)"
+            placeholder="e.g. Midterm Quiz - Section A"
+            value={sessionTitle}
+            onChange={e => setSessionTitle(e.target.value)}
           />
+
+          <div className="flex items-center justify-between py-1">
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-theme-secondary font-bold hover:text-theme-primary transition-colors">
+              <input
+                type="checkbox"
+                checked={isMultiQuiz}
+                onChange={e => {
+                  const checked = e.target.checked
+                  setIsMultiQuiz(checked)
+                  if (checked) {
+                    setSelectedQuizIds(selectedQuizId ? [selectedQuizId] : [])
+                    setTransitionMessages([])
+                  } else {
+                    setSelectedQuizId(selectedQuizIds[0] ?? '')
+                  }
+                }}
+                className="rounded border-white/20 bg-white/5 text-brand-500 focus:ring-brand-500 w-4 h-4"
+              />
+              Conduct Multi-Quiz Event (Sequential Play)
+            </label>
+          </div>
+
+          {!isMultiQuiz ? (
+            <Select
+              label="Select Quiz"
+              value={selectedQuizId}
+              onChange={e => setSelectedQuizId(e.target.value)}
+              options={quizzes.filter(q => q.is_published).map(q => ({ value: q.id, label: q.title }))}
+              placeholder="Select a quiz..."
+            />
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="label-text block mb-1.5 font-bold">Select Quizzes (In order of play)</label>
+                <div className="max-h-40 overflow-y-auto space-y-2 glass p-3 rounded-xl border border-theme">
+                  {quizzes.filter(q => q.is_published).map(q => {
+                    const isChecked = selectedQuizIds.includes(q.id)
+                    const idx = selectedQuizIds.indexOf(q.id)
+                    return (
+                      <label key={q.id} className="flex items-center gap-2 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors text-sm text-theme-primary font-medium">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {
+                            if (isChecked) {
+                              setSelectedQuizIds(prev => prev.filter(id => id !== q.id))
+                              setTransitionMessages(prev => prev.slice(0, -1))
+                            } else {
+                              setSelectedQuizIds(prev => [...prev, q.id])
+                              setTransitionMessages(prev => [...prev, ''])
+                            }
+                          }}
+                          className="rounded border-white/20 bg-white/5 text-brand-500 focus:ring-brand-500 w-4 h-4"
+                        />
+                        <span>{q.title}</span>
+                        {isChecked && (
+                          <span className="ml-auto bg-brand-500 text-white text-[10px] font-black rounded-full px-2 py-0.5">
+                            Quiz #{idx + 1}
+                          </span>
+                        )}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {selectedQuizIds.slice(0, -1).map((qid, idx) => {
+                const q = quizzes.find(x => x.id === qid)
+                return (
+                  <div key={qid} className="space-y-1">
+                    <label className="label-text block text-xs text-theme-secondary font-bold">
+                      Transition Message after "{q?.title}" (Quiz #{idx + 1})
+                    </label>
+                    <input
+                      type="text"
+                      value={transitionMessages[idx] ?? ''}
+                      onChange={e => {
+                        const next = [...transitionMessages]
+                        next[idx] = e.target.value
+                        setTransitionMessages(next)
+                      }}
+                      placeholder="e.g. Great job! Next up is the Math round. Get ready!"
+                      className="input-field w-full text-xs"
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           {/* Mode selector */}
           <div>
@@ -353,7 +456,7 @@ export default function SessionsPage() {
             <Button variant="outline" className="flex-1" onClick={() => setCreateModal(false)}>Cancel</Button>
             <Button className="flex-1" isLoading={creating}
               leftIcon={sessionMode === 'live' ? <Play className="w-4 h-4" /> : <BookOpen className="w-4 h-4" />}
-              onClick={handleCreate} disabled={!selectedQuizId}>
+              onClick={handleCreate} disabled={isMultiQuiz ? selectedQuizIds.length === 0 : !selectedQuizId}>
               {sessionMode === 'live' ? 'Create Session' : 'Assign Quiz'}
             </Button>
           </div>

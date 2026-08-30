@@ -147,7 +147,7 @@ export default function QuizLobbyPage() {
             <Wifi className="w-4 h-4 text-success-400 animate-pulse" />
             <span className="text-sm font-medium text-success-400">Connected</span>
           </div>
-          <h1 className="text-4xl font-black text-theme-primary mb-2">{quiz?.title ?? 'Quiz Lobby'}</h1>
+          <h1 className="text-4xl font-black text-theme-primary mb-2">{session?.title || quiz?.title || 'Quiz Lobby'}</h1>
           <p className="text-theme-secondary">{quiz?.question_count ?? 0} questions · Waiting for host to start{dots}</p>
         </motion.div>
 

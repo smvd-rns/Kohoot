@@ -8,7 +8,7 @@ import { quizService } from '@/services/quiz.service'
 import { useAuthStore } from '@/store/authStore'
 import { cn, getTheme, getEmbedUrl } from '@/lib/utils'
 import toast from 'react-hot-toast'
-import type { Question, AnswerOption, Quiz } from '@/types'
+import type { Question, AnswerOption, Quiz, QuizSession } from '@/types'
 
 const ANSWER_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
 const ANSWER_ICONS = ['▲', '◆', '●', '★']
@@ -86,6 +86,8 @@ export default function SelfPacedPlayPage() {
   const [showSoundBanner, setShowSoundBanner] = useState(true)
   const [themeId, setThemeId] = useState<string>('modern')
   const [shuffledOptions, setShuffledOptions] = useState<AnswerOption[]>([])
+  const [isTransit, setIsTransit] = useState(false)
+  const [session, setSession] = useState<QuizSession | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const answerStartTime = useRef(Date.now())
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -111,9 +113,9 @@ export default function SelfPacedPlayPage() {
     if (!sessionId || !profile) return
     try {
       const session = await quizService.getSession(sessionId)
-      if (session.quiz) {
-        setQuiz(session.quiz as unknown as Quiz)
-      }
+      setSession(session as unknown as QuizSession)
+      setIsTransit(false)
+
       if (session.deadline) {
         setDeadline(session.deadline)
         if (new Date(session.deadline).getTime() < Date.now()) {
@@ -123,39 +125,48 @@ export default function SelfPacedPlayPage() {
         }
       }
 
-      // Load background music if configured
-      if (session.quiz?.background_music_url) {
-        setMusicUrl(session.quiz.background_music_url)
-      }
-
-      let qs = await quizService.getQuestions(session.quiz_id)
-      
-      // Shuffle questions if enabled in settings
-      if (session.quiz?.shuffle_questions) {
-        qs = [...qs].sort(() => Math.random() - 0.5)
-      }
-      setQuestions(qs)
-
-      // Store current quiz theme styling values
-      const quizTheme = session.quiz?.theme ?? 'modern'
-      setThemeId(quizTheme)
-
       // Get or create participant record
-      let part = (session.participants as unknown as Array<{ student_id: string; id: string; score: number; student_question_index: number; is_finished: boolean }>)
+      let part = (session.participants as unknown as Array<{ student_id: string; id: string; score: number; student_question_index: number; is_finished: boolean; current_quiz_id?: string }>)
         ?.find(p => p.student_id === profile.id)
 
       if (!part) {
         // Check if the quiz has custom registration fields
         const customFields = await quizService.getCustomFields(session.quiz_id)
         if (customFields.length > 0) {
-          // Redirect to join page to collect registration data first.
-          // JoinQuizPage will save custom field responses, then navigate back here.
           navigate(`/student/join?code=${session.room_code}`, { replace: true })
           return
         }
         const joined = await quizService.joinSession(sessionId, profile.id, profile.display_name, profile.avatar_seed)
         part = joined as unknown as typeof part
       }
+
+      const activeQuizId = part?.current_quiz_id || session.quiz_id
+      let activeQuiz = session.quiz
+
+      if (activeQuizId !== session.quiz_id) {
+        const { data: qData } = await supabase.from('quizzes').select('*').eq('id', activeQuizId).single()
+        if (qData) activeQuiz = qData
+      }
+
+      if (activeQuiz) {
+        setQuiz(activeQuiz as unknown as Quiz)
+        setThemeId(activeQuiz.theme ?? 'modern')
+        if (activeQuiz.background_music_url) {
+          setMusicUrl(activeQuiz.background_music_url)
+        } else {
+          import('@/lib/music').then(m => setMusicUrl(m.BACKGROUND_MUSIC[1].url))
+        }
+      }
+
+      let qs = await quizService.getQuestions(activeQuizId)
+      
+      // Shuffle questions if enabled in settings
+      if (activeQuiz?.shuffle_questions) {
+        qs = [...qs].sort(() => Math.random() - 0.5)
+      }
+      setQuestions(qs)
+
+      // Shuffled options and timeLeft setup follows below
 
       if (part) {
         setParticipantId(part.id)
@@ -293,12 +304,16 @@ export default function SelfPacedPlayPage() {
   }
 
   const handleNext = async () => {
-    if (!participantId) return
+    if (!participantId || !session) return
     const nextIdx = currentIdx + 1
     if (nextIdx >= questions.length) {
-      // All questions done
-      await quizService.finishStudentSession(participantId)
-      navigate(`/quiz/results/${sessionId}`)
+      const currentQuizIdx = session.quiz_ids?.indexOf(currentQ?.quiz_id ?? '') ?? -1
+      if (session.quiz_ids && currentQuizIdx !== -1 && currentQuizIdx < session.quiz_ids.length - 1) {
+        setIsTransit(true)
+      } else {
+        await quizService.finishStudentSession(participantId)
+        navigate(`/quiz/results/${sessionId}`)
+      }
     } else {
       await quizService.advanceStudentQuestion(participantId, nextIdx)
       setCurrentIdx(nextIdx)
@@ -318,6 +333,65 @@ export default function SelfPacedPlayPage() {
       setIsCorrect(null)
       setPointsEarned(0)
     }
+  }
+
+  const handleStartNextQuiz = async () => {
+    if (!session || !participantId || !currentQ) return
+    const currentQuizIdx = session.quiz_ids?.indexOf(currentQ.quiz_id) ?? -1
+    const nextQuizId = session.quiz_ids?.[currentQuizIdx + 1]
+    if (!nextQuizId) return
+    
+    setLoading(true)
+    try {
+      await quizService.transitionSelfPacedParticipant(participantId, nextQuizId)
+      
+      const { data: qData } = await supabase.from('quizzes').select('*').eq('id', nextQuizId).single()
+      if (qData) {
+        setQuiz(qData as unknown as Quiz)
+        setThemeId(qData.theme ?? 'modern')
+        if (qData.background_music_url) {
+          setMusicUrl(qData.background_music_url)
+        }
+      }
+      
+      const qs = await quizService.getQuestions(nextQuizId)
+      setQuestions(qs)
+      setCurrentIdx(0)
+      setCurrentQ(qs[0])
+      setShuffledOptions(qs[0]?.answer_options ?? [])
+      setTimeLeft(qs[0]?.time_limit ?? 30)
+      setSelected([])
+      setHasAnswered(false)
+      setIsCorrect(null)
+      setPointsEarned(0)
+      setIsTransit(false)
+    } catch {
+      toast.error('Failed to start the next quiz')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (isTransit) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center p-6 text-center" style={{ background: 'linear-gradient(135deg, var(--color-bg-primary), var(--color-bg-secondary))' }}>
+        <div className="max-w-md w-full glass-strong p-8 rounded-3xl border border-white/10 shadow-2xl space-y-6">
+          <div className="text-6xl animate-bounce">🏁</div>
+          <h2 className="text-3xl font-black text-white">Quiz Finished!</h2>
+          <p className="text-theme-secondary text-sm leading-relaxed">
+            Get ready for the next quiz in this event.
+          </p>
+          {session?.transition_messages && (
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 italic text-theme-primary text-sm font-medium">
+              "{session.transition_messages[session.quiz_ids?.indexOf(currentQ?.quiz_id ?? '') ?? 0] || 'Stay tuned, the next quiz is starting soon!'}"
+            </div>
+          )}
+          <Button size="xl" className="w-full" rightIcon={<ChevronRight className="w-5 h-5" />} onClick={handleStartNextQuiz}>
+            Start Next Quiz
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   if (loading) {
@@ -574,7 +648,11 @@ export default function SelfPacedPlayPage() {
               rightIcon={<ChevronRight className="w-5 h-5" />} 
               onClick={handleNext}
             >
-              {currentIdx + 1 >= questions.length ? '🎉 Finish Quiz' : 'Next Question'}
+              {currentIdx + 1 >= questions.length ? (
+                session?.quiz_ids && (session.quiz_ids.indexOf(currentQ?.quiz_id ?? '') < session.quiz_ids.length - 1)
+                  ? 'Next Quiz'
+                  : '🎉 Finish Quiz'
+              ) : 'Next Question'}
             </Button>
           </motion.div>
         )}

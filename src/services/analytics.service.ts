@@ -147,7 +147,7 @@ export const analyticsService = {
   async getRecentActivity(adminId: string) {
     const { data } = await supabase
       .from('quiz_sessions')
-      .select('*, quiz:quizzes(title), participants:session_participants(count)')
+      .select('*, quiz:quizzes!current_quiz_id(title), participants:session_participants(count)')
       .eq('admin_id', adminId)
       .order('created_at', { ascending: false })
       .limit(10)

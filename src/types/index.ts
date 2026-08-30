@@ -142,6 +142,10 @@ export interface QuizSession {
   started_at?: string
   ended_at?: string
   created_at: string
+  quiz_ids?: string[]
+  current_quiz_id?: string
+  transition_messages?: string[]
+  title?: string
   // Relations
   quiz?: Quiz
   participants?: SessionParticipant[]
@@ -165,6 +169,7 @@ export interface SessionParticipant {
   finished_at?: string
   student_question_index: number   // for self-paced: which question the student is on
   is_finished: boolean             // for self-paced: did the student complete all questions?
+  current_quiz_id?: string         // for self-paced: which quiz the student is currently on
   // Relations
   profile?: Profile
   custom_field_responses?: CustomFieldResponse[]

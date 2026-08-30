@@ -7,6 +7,7 @@ import { Button, Avatar } from '@/components/ui'
 import { quizService } from '@/services/quiz.service'
 import { useAuthStore } from '@/store/authStore'
 import { scoreGrade, cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 import type { LeaderboardEntry } from '@/types'
 
 export default function ResultsPage() {
@@ -18,13 +19,48 @@ export default function ResultsPage() {
   const [showConfetti, setShowConfetti] = useState(true)
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight })
   const [sessionMode, setSessionMode] = useState<'live' | 'self_paced'>('live')
+  const [quizBreakdown, setQuizBreakdown] = useState<Array<{ quizId: string; title: string; score: number }>>([])
 
   useEffect(() => {
     window.addEventListener('resize', () => setWindowSize({ width: window.innerWidth, height: window.innerHeight }))
     if (!sessionId || !profile) return
 
-    quizService.getSession(sessionId).then(session => {
+    quizService.getSession(sessionId).then(async (session) => {
       setSessionMode((session as any).mode ?? 'live')
+      
+      if (session.quiz_ids && session.quiz_ids.length > 1) {
+        try {
+          const { data: answers } = await supabase
+            .from('participant_answers')
+            .select('points_earned, participant_id, question:questions(quiz_id)')
+            .eq('session_id', sessionId)
+            
+          const { data: qData } = await supabase
+            .from('quizzes')
+            .select('id, title')
+            .in('id', session.quiz_ids)
+
+          if (answers && qData) {
+            const myPart = session.participants?.find((p: any) => p.student_id === profile.id)
+            if (myPart) {
+              const breakdown = session.quiz_ids.map((qid: string) => {
+                const qInfo = qData.find(x => x.id === qid)
+                const score = answers
+                  .filter(a => (a.question as any)?.quiz_id === qid && a.participant_id === myPart.id)
+                  .reduce((sum, a) => sum + a.points_earned, 0)
+                return {
+                  quizId: qid,
+                  title: qInfo?.title ?? 'Quiz',
+                  score
+                }
+              })
+              setQuizBreakdown(breakdown)
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load quiz breakdown:', err)
+        }
+      }
     }).catch(err => console.error('Failed to load session mode:', err))
 
     quizService.getLeaderboard(sessionId).then(async (lb) => {
@@ -83,10 +119,27 @@ export default function ResultsPage() {
             <p className="text-theme-secondary text-sm leading-relaxed mb-6">
               Your answers have been successfully recorded. The final rankings and winners will be announced once the quiz session closes.
             </p>
-            <div className="bg-brand-500/10 border border-brand-500/20 rounded-2xl p-4 inline-block">
+            <div className="bg-brand-500/10 border border-brand-500/20 rounded-2xl p-4 inline-block mb-6">
               <p className="text-xs text-brand-400 font-bold uppercase tracking-wider">Status</p>
               <p className="text-white text-base font-black mt-1">Submitted Successfully ✅</p>
             </div>
+
+            {/* Self paced quiz breakdown */}
+            {quizBreakdown.length > 0 && (
+              <div className="space-y-3 text-left bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
+                <p className="text-xs text-theme-secondary font-bold uppercase tracking-wider mb-2 text-center">Score Breakdown</p>
+                {quizBreakdown.map((item, idx) => (
+                  <div key={item.quizId} className="flex justify-between items-center text-xs font-semibold">
+                    <span className="text-theme-secondary truncate max-w-[200px]">{idx + 1}. {item.title}</span>
+                    <span className="text-brand-400 font-bold">{item.score.toLocaleString()} pts</span>
+                  </div>
+                ))}
+                <div className="flex justify-between items-center text-xs font-extrabold border-t border-white/10 pt-2 mt-2">
+                  <span className="text-white">Total Score</span>
+                  <span className="text-brand-400 font-black">{quizBreakdown.reduce((sum, item) => sum + item.score, 0).toLocaleString()} pts</span>
+                </div>
+              </div>
+            )}
           </motion.div>
         ) : (
           <>
@@ -104,6 +157,29 @@ export default function ResultsPage() {
                 </>
               )}
             </motion.div>
+
+            {/* Live quiz breakdown */}
+            {quizBreakdown.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} className="w-full max-w-md bg-white/5 border border-white/10 rounded-3xl p-6 shadow-xl mb-8 space-y-4">
+                <h3 className="text-sm font-bold text-theme-secondary uppercase tracking-wider text-center border-b border-white/10 pb-3 flex items-center justify-center gap-2">
+                  📊 Performance Breakdown
+                </h3>
+                <div className="space-y-3">
+                  {quizBreakdown.map((item, idx) => (
+                    <div key={item.quizId} className="flex justify-between items-center text-sm font-semibold p-2 rounded-xl hover:bg-white/3 transition-all">
+                      <span className="text-theme-secondary truncate max-w-[250px]">{idx + 1}. {item.title}</span>
+                      <span className="text-brand-400 text-right shrink-0">{item.score.toLocaleString()} pts</span>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center text-base font-extrabold border-t border-white/10 pt-3 mt-1">
+                    <span className="text-white">Total Score</span>
+                    <span className="text-brand-400">
+                      {quizBreakdown.reduce((sum, item) => sum + item.score, 0).toLocaleString()} pts
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
 
             {/* Podium */}
             {top3.length >= 3 && (

@@ -126,6 +126,28 @@ export const authService = {
     if (error) throw error
     if (!authData.user) throw new Error('Guest login failed')
 
+    // Check if the profile was already created by a trigger
+    const { data: existingProfile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', authData.user.id)
+      .maybeSingle()
+
+    if (existingProfile) {
+      // If a trigger created it, let's update it with the entered nickname/display_name
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          display_name: displayName,
+          username: existingProfile.username || `guest_${authData.user.id.substring(0, 8)}`
+        })
+        .eq('id', authData.user.id)
+        .select()
+        .single()
+      if (updateError) throw updateError
+      return updatedProfile
+    }
+
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .insert({

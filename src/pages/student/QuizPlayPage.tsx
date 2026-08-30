@@ -8,7 +8,7 @@ import { quizService } from '@/services/quiz.service'
 import { useAuthStore } from '@/store/authStore'
 import { useQuizStore } from '@/store/quizStore'
 import { cn, getTheme, getEmbedUrl } from '@/lib/utils'
-import type { Question, AnswerOption, LeaderboardEntry, Quiz } from '@/types'
+import type { Question, AnswerOption, LeaderboardEntry, Quiz, QuizSession } from '@/types'
 import toast from 'react-hot-toast'
 
 const ANSWER_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
@@ -115,6 +115,8 @@ export default function QuizPlayPage() {
   const [themeId, setThemeId] = useState<string>('modern')
   const [shuffledOptions, setShuffledOptions] = useState<AnswerOption[]>([])
   const [quiz, setQuiz] = useState<Quiz | null>(null)
+  const [isTransit, setIsTransit] = useState(false)
+  const [session, setSession] = useState<QuizSession | null>(null)
   const answerStartTime = useRef(Date.now())
   const audioRef = useRef<HTMLAudioElement>(null)
 
@@ -142,6 +144,8 @@ export default function QuizPlayPage() {
     if (!sessionId || !profile) return
     try {
       const session = await quizService.getSession(sessionId)
+      setSession(session as unknown as QuizSession)
+      setIsTransit(false)
       
       if (session.quiz) {
         setQuiz(session.quiz as unknown as Quiz)
@@ -152,7 +156,8 @@ export default function QuizPlayPage() {
         import('@/lib/music').then(m => setMusicUrl(m.BACKGROUND_MUSIC[1].url))
       }
 
-      let qs = await quizService.getQuestions(session.quiz_id)
+      const activeQuizId = session.current_quiz_id || session.quiz_id
+      let qs = await quizService.getQuestions(activeQuizId)
       
       // Shuffle questions if enabled in settings
       if (session.quiz?.shuffle_questions) {
@@ -235,8 +240,15 @@ export default function QuizPlayPage() {
     if (!sessionId) return
     const ch = supabase.channel(`game-${sessionId}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'quiz_sessions', filter: `id=eq.${sessionId}` }, async (payload) => {
-        const s = payload.new as { status: string; current_question_index: number }
+        const s = payload.new as { status: string; current_question_index: number; current_quiz_id?: string }
         if (s.status === 'completed') { setIsFinished(true); navigate(`/quiz/results/${sessionId}`); return }
+        
+        if (s.current_quiz_id && s.current_quiz_id !== session?.current_quiz_id) {
+          setLoading(true)
+          await loadQuiz()
+          return
+        }
+
         const idx = s.current_question_index
         if (idx !== currentIdx) {
           setCurrentIdx(idx)
@@ -264,6 +276,8 @@ export default function QuizPlayPage() {
           const lb = await quizService.getLeaderboard(sessionId!)
           setLeaderboard(lb as unknown as LeaderboardEntry[])
           setShowLeaderboard(true)
+        } else if (payload.state === 'transit') {
+          setIsTransit(true)
         } else if (payload.state === 'results') {
           // Host stopped the timer early
           if (!hasAnswered) {
@@ -276,7 +290,7 @@ export default function QuizPlayPage() {
       })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
-  }, [sessionId, currentIdx, questions, navigate, hasAnswered, handleTimeUp])
+  }, [sessionId, currentIdx, questions, navigate, hasAnswered, handleTimeUp, session?.current_quiz_id])
 
   const handleAnswer = async (optionId: string) => {
     if (hasAnswered || !currentQ || !participantId) return
@@ -336,10 +350,36 @@ export default function QuizPlayPage() {
     }
   }
 
+  if (isTransit) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center p-6 text-center" style={{ background: 'linear-gradient(135deg, var(--color-bg-primary), var(--color-bg-secondary))' }}>
+        <div className="max-w-md w-full glass-strong p-8 rounded-3xl border border-white/10 shadow-2xl space-y-6">
+          <div className="text-6xl animate-bounce">🏁</div>
+          <h2 className="text-3xl font-black text-white">Quiz Finished!</h2>
+          <p className="text-theme-secondary text-sm leading-relaxed">
+            Get ready for the next quiz in this event.
+          </p>
+          {session?.transition_messages && (
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 italic text-theme-primary text-sm font-medium">
+              "{session.transition_messages[session.quiz_ids?.indexOf(session.current_quiz_id ?? '') ?? 0] || 'Stay tuned, the next quiz is starting soon!'}"
+            </div>
+          )}
+          <div className="flex items-center justify-center gap-2 text-xs text-brand-400 font-bold animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-brand-400" />
+            Waiting for Host to start...
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (loading || !currentQ) {
     return (
       <div className="fixed inset-0 flex items-center justify-center" style={{ background: 'var(--color-bg-primary)' }}>
-        <Spinner size="lg" />
+        <div className="flex flex-col items-center gap-4">
+          <Spinner size="lg" />
+          <p className="text-xs text-theme-secondary font-medium">Loading session content...</p>
+        </div>
       </div>
     )
   }

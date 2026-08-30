@@ -232,8 +232,11 @@ export const quizService = {
   },
 
   // ── Sessions ──────────────────────────────────────────────────────────────────
-  async createSession(quizId: string, adminId: string, opts?: { mode?: 'live' | 'self_paced'; deadline?: string; participantMode?: 'any' | 'registered_only' }) {
+  async createSession(quizId: string, adminId: string, opts?: { mode?: 'live' | 'self_paced'; deadline?: string; participantMode?: 'any' | 'registered_only'; quizIds?: string[]; transitionMessages?: string[]; title?: string }) {
     const roomCode = generateRoomCode()
+    const finalQuizIds = opts?.quizIds && opts.quizIds.length > 0 ? opts.quizIds : [quizId]
+    const currentQuizId = finalQuizIds[0]
+
     const insertData: Record<string, unknown> = {
       quiz_id: quizId,
       admin_id: adminId,
@@ -242,12 +245,16 @@ export const quizService = {
       mode: opts?.mode ?? 'live',
       participant_mode: opts?.participantMode ?? 'any',
       current_question_index: 0,
+      quiz_ids: finalQuizIds,
+      current_quiz_id: currentQuizId,
+      transition_messages: opts?.transitionMessages ?? [],
+      title: opts?.title || null,
     }
     if (opts?.deadline) insertData.deadline = opts.deadline
     const { data, error } = await supabase
       .from('quiz_sessions')
       .insert(insertData)
-      .select('*, quiz:quizzes(*)')
+      .select('*, quiz:quizzes!current_quiz_id(*)')
       .single()
     if (error) throw error
     return data
@@ -256,7 +263,7 @@ export const quizService = {
   async getSessionByCode(code: string) {
     const { data, error } = await supabase
       .from('quiz_sessions')
-      .select('*, quiz:quizzes(*, questions(count))')
+      .select('*, quiz:quizzes!current_quiz_id(*, questions(count))')
       .eq('room_code', code.toUpperCase())
       .in('status', ['waiting', 'active', 'self_paced'])
       .single()
@@ -267,7 +274,7 @@ export const quizService = {
   async getSession(id: string) {
     const { data, error } = await supabase
       .from('quiz_sessions')
-      .select('*, quiz:quizzes(*), participants:session_participants(*)')
+      .select('*, quiz:quizzes!current_quiz_id(*), participants:session_participants(*)')
       .eq('id', id)
       .single()
     if (error) throw error
@@ -432,7 +439,7 @@ export const quizService = {
     const now = new Date().toISOString()
     const { data, error } = await supabase
       .from('quiz_sessions')
-      .select('*, quiz:quizzes(title, thumbnail_url, theme, question_count)')
+      .select('*, quiz:quizzes!current_quiz_id(title, thumbnail_url, theme, question_count)')
       .eq('status', 'self_paced')
       .or(`deadline.is.null,deadline.gt.${now}`)
       .order('created_at', { ascending: false })
@@ -476,7 +483,7 @@ export const quizService = {
         wrong_answers,
         session_id,
         profile:profiles!session_participants_student_id_fkey(id, display_name, avatar_seed, email),
-        session:quiz_sessions!session_participants_session_id_fkey(admin_id, created_at, quiz:quizzes(title))
+        session:quiz_sessions!session_participants_session_id_fkey(admin_id, created_at, quiz:quizzes!current_quiz_id(title))
       `)
 
     const { data, error } = await query
@@ -537,7 +544,7 @@ export const quizService = {
   async getAdminSessions(adminId: string, role?: string) {
     let query = supabase
       .from('quiz_sessions')
-      .select('*, quiz:quizzes(title, thumbnail_url), participants:session_participants(count)')
+      .select('*, quiz:quizzes!current_quiz_id(title, thumbnail_url), participants:session_participants(count)')
       
     if (role !== 'super_admin') {
       query = query.eq('admin_id', adminId)
@@ -552,7 +559,7 @@ export const quizService = {
   async getSessionReport(sessionId: string) {
     const { data: session, error: sessionErr } = await supabase
       .from('quiz_sessions')
-      .select('*, quiz:quizzes(*)')
+      .select('*, quiz:quizzes!current_quiz_id(*)')
       .eq('id', sessionId)
       .single()
     if (sessionErr) throw sessionErr
@@ -577,20 +584,67 @@ export const quizService = {
       .order('score', { ascending: false })
     if (partErr) throw partErr
 
+    // Fetch quiz details and answers for multi-quiz breakdown reports
+    let quizzes: Array<{ id: string; title: string }> = []
+    let answers: any[] = []
+    if (session.quiz_ids && session.quiz_ids.length > 0) {
+      const { data: qData } = await supabase
+        .from('quizzes')
+        .select('id, title')
+        .in('id', session.quiz_ids)
+      if (qData) quizzes = qData
+      
+      const { data: aData } = await supabase
+        .from('participant_answers')
+        .select('participant_id, question_id, points_earned, is_correct, question:questions(quiz_id)')
+        .eq('session_id', sessionId)
+      if (aData) answers = aData
+    }
+
     return {
       session,
       customFields,
-      participants: participants || []
+      participants: participants || [],
+      quizzes,
+      answers
     }
   },
 
   async getStudentHistory(studentId: string) {
     const { data, error } = await supabase
       .from('session_participants')
-      .select('*, session:quiz_sessions(*, quiz:quizzes(title, thumbnail_url, theme))')
+      .select('*, session:quiz_sessions(*, quiz:quizzes!current_quiz_id(title, thumbnail_url, theme))')
       .eq('student_id', studentId)
       .order('joined_at', { ascending: false })
     if (error) throw error
     return data ?? []
+  },
+
+  async transitionToNextQuiz(sessionId: string, nextQuizId: string) {
+    const { data, error } = await supabase
+      .from('quiz_sessions')
+      .update({
+        current_quiz_id: nextQuizId,
+        current_question_index: 0
+      })
+      .eq('id', sessionId)
+      .select('*, quiz:quizzes!current_quiz_id(*)')
+      .single()
+    if (error) throw error
+    return data
+  },
+
+  async transitionSelfPacedParticipant(participantId: string, nextQuizId: string) {
+    const { data, error } = await supabase
+      .from('session_participants')
+      .update({
+        current_quiz_id: nextQuizId,
+        student_question_index: 0
+      })
+      .eq('id', participantId)
+      .select()
+      .single()
+    if (error) throw error
+    return data
   },
 }

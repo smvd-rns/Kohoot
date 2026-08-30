@@ -214,8 +214,9 @@ export default function JoinQuizPage() {
           setProfile(guestProfile)
           currentProfile = guestProfile
           toast.success(`Signed in as guest: ${guestProfile.display_name}`, { id: 'auth-guest' })
-        } catch {
-          toast.error('Failed to log in as guest.', { id: 'auth-guest' })
+        } catch (err: any) {
+          console.error('Guest login failed:', err)
+          toast.error(`Failed to log in as guest: ${err.message || err}`, { id: 'auth-guest', duration: 8000 })
           setLoading(false)
           return
         }

@@ -86,13 +86,13 @@ export default function StudentDashboard() {
           <EmptyState icon="🎮" title="No quizzes yet" description="Join a quiz to get started!" action={<Link to="/student/join"><Button leftIcon={<Plus className="w-4 h-4" />}>Join Quiz</Button></Link>} />
         ) : (
           <div className="divide-y divide-theme">
-            {(history as Array<{ id: string; score: number; correct_answers: number; joined_at: string; session: { quiz: { title: string; theme: string } } }>).map(h => {
+            {(history as Array<{ id: string; score: number; correct_answers: number; joined_at: string; session: { title?: string; quiz: { title: string; theme: string } } }>).map(h => {
               const theme = getTheme(h.session?.quiz?.theme as never ?? 'modern')
               return (
                 <div key={h.id} className="flex items-center gap-4 p-4 hover:bg-white/3">
                   <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ background: theme.gradient }}>{theme.emoji}</div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-theme-primary truncate">{h.session?.quiz?.title ?? 'Quiz'}</p>
+                    <p className="font-medium text-theme-primary truncate">{h.session?.title || h.session?.quiz?.title || 'Quiz'}</p>
                     <p className="text-xs text-theme-secondary">{timeAgo(h.joined_at)}</p>
                   </div>
                   <div className="text-right">
