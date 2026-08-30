@@ -107,6 +107,7 @@ export interface Question {
   // For open_ended
   max_answer_length?: number
   created_at: string
+  custom_weighting?: boolean
   // Relations
   answer_options?: AnswerOption[]
 }
@@ -122,6 +123,7 @@ export interface AnswerOption {
   order_index: number
   image_url?: string
   feedback?: string
+  weight?: number
 }
 
 // =====================================================

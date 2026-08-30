@@ -72,7 +72,17 @@ function SortableQuestion({ q, isSelected, onSelect, onDelete }: { q: Question; 
 }
 
 // ── Option editor ────────────────────────────────────────────────────────────
-function OptionEditor({ options, onChange, multiCorrect = false }: { options: Partial<AnswerOption>[]; onChange: (opts: Partial<AnswerOption>[]) => void; multiCorrect?: boolean }) {
+function OptionEditor({ 
+  options, 
+  onChange, 
+  multiCorrect = false, 
+  customWeighting = false 
+}: { 
+  options: Partial<AnswerOption>[]; 
+  onChange: (opts: Partial<AnswerOption>[]) => void; 
+  multiCorrect?: boolean; 
+  customWeighting?: boolean 
+}) {
   const colors = ['#e21b3c', '#1368ce', '#d89e00', '#26890c', '#7c6fef', '#f928b8']
 
   return (
@@ -88,18 +98,73 @@ function OptionEditor({ options, onChange, multiCorrect = false }: { options: Pa
             placeholder={`Option ${i + 1}`}
             className="flex-1"
           />
-          <button
-            type="button"
-            onClick={() => {
-              const next = [...options]
-              if (multiCorrect) next[i] = { ...next[i], is_correct: !next[i].is_correct }
-              else next.forEach((o, j) => { next[j] = { ...o, is_correct: j === i } })
-              onChange(next)
-            }}
-            className={cn('px-3 py-1.5 rounded-lg text-xs font-semibold transition-all', opt.is_correct ? 'bg-success-500/20 text-success-400 border border-success-500' : 'bg-white/5 text-theme-secondary border border-transparent')}
-          >
-            {opt.is_correct ? '✓ Correct' : 'Mark correct'}
-          </button>
+          {customWeighting ? (
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5">
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={opt.weight ?? (opt.is_correct ? 100 : 0)}
+                  onChange={e => {
+                    const otherSum = options.reduce((sum, o, idx) => idx === i ? sum : sum + (o.weight ?? (o.is_correct ? 100 : 0)), 0)
+                    const maxAllowed = Math.max(0, 100 - otherSum)
+                    const val = Math.min(maxAllowed, Math.max(0, Number(e.target.value) || 0))
+                    const next = [...options]
+                    next[i] = { ...next[i], weight: val, is_correct: val > 0 }
+                    onChange(next)
+                  }}
+                  className="w-10 bg-transparent text-center focus:outline-none text-xs font-black text-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="text-[10px] text-theme-secondary font-black">%</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = [...options]
+                  const currentWeight = next[i].weight ?? (next[i].is_correct ? 100 : 0)
+                  const otherSum = options.reduce((sum, o, idx) => idx === i ? sum : sum + (o.weight ?? (o.is_correct ? 100 : 0)), 0)
+                  const maxAllowed = Math.max(0, 100 - otherSum)
+                  const newVal = currentWeight > 0 ? 0 : maxAllowed
+                  next[i] = { ...next[i], weight: newVal, is_correct: newVal > 0 }
+                  onChange(next)
+                }}
+                className={cn(
+                  'px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all border',
+                  (opt.weight ?? (opt.is_correct ? 100 : 0)) > 0
+                    ? 'bg-success-500/20 text-success-400 border-success-500'
+                    : 'bg-white/5 text-theme-secondary border-transparent'
+                )}
+                title={(opt.weight ?? (opt.is_correct ? 100 : 0)) > 0 ? 'Mark incorrect (0%)' : 'Mark correct (100%)'}
+              >
+                {(opt.weight ?? (opt.is_correct ? 100 : 0)) > 0 ? '✓' : '✗'}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                const next = [...options]
+                if (multiCorrect) {
+                  const nextVal = !next[i].is_correct
+                  next[i] = { ...next[i], is_correct: nextVal, weight: nextVal ? 100 : 0 }
+                } else {
+                  next.forEach((o, j) => {
+                    next[j] = { ...o, is_correct: j === i, weight: j === i ? 100 : 0 }
+                  })
+                }
+                onChange(next)
+              }}
+              className={cn(
+                'px-3 py-1.5 rounded-lg text-xs font-semibold transition-all',
+                opt.is_correct
+                  ? 'bg-success-500/20 text-success-400 border border-success-500'
+                  : 'bg-white/5 text-theme-secondary border border-transparent'
+              )}
+            >
+              {opt.is_correct ? '✓ Correct' : 'Mark correct'}
+            </button>
+          )}
           {options.length > 2 && (
             <button type="button" onClick={() => onChange(options.filter((_, j) => j !== i))} className="text-danger-400 hover:bg-danger-500/10 p-1 rounded">
               <Trash2 className="w-3 h-3" />
@@ -110,7 +175,7 @@ function OptionEditor({ options, onChange, multiCorrect = false }: { options: Pa
       {options.length < 6 && (
         <button
           type="button"
-          onClick={() => onChange([...options, { text: '', is_correct: false, order_index: options.length }])}
+          onClick={() => onChange([...options, { text: '', is_correct: false, weight: 0, order_index: options.length }])}
           className="text-xs text-brand-400 hover:underline flex items-center gap-1 mt-1"
         >
           <Plus className="w-3 h-3" /> Add option
@@ -200,8 +265,53 @@ function QuestionEditor({ question, onUpdate, onSaveOptions }: { question: Quest
 
       {/* Options */}
       {needsOptions && !isTrueFalse && (
-        <div>
-          <p className="text-sm font-medium text-theme-secondary mb-3">Answer Options</p>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-theme-secondary">Answer Options</p>
+            <label className="flex items-center gap-2 cursor-pointer text-xs text-theme-secondary font-bold hover:text-theme-primary transition-colors">
+              <input
+                type="checkbox"
+                checked={question.custom_weighting ?? false}
+                onChange={e => {
+                  const checked = e.target.checked
+                  let updatedOptions: Partial<AnswerOption>[] = []
+                  
+                  if (checked) {
+                    const correctCount = options.filter(o => o.is_correct).length
+                    const equalWeight = correctCount > 0 ? Math.floor(100 / correctCount) : 0
+                    let allocatedSum = 0
+                    
+                    updatedOptions = options.map((o, idx) => {
+                      if (o.is_correct) {
+                        const isLastCorrect = options.slice(idx + 1).filter(rest => rest.is_correct).length === 0
+                        const w = isLastCorrect ? (100 - allocatedSum) : equalWeight
+                        allocatedSum += w
+                        return { ...o, weight: w, is_correct: w > 0 }
+                      }
+                      return { ...o, weight: 0, is_correct: false }
+                    })
+                  } else {
+                    updatedOptions = options.map(o => {
+                      const currentWeight = o.weight ?? (o.is_correct ? 100 : 0)
+                      return {
+                        ...o,
+                        weight: undefined,
+                        is_correct: currentWeight > 0
+                      }
+                    })
+                  }
+                  
+                  setOptions(updatedOptions)
+                  onUpdate({ 
+                    custom_weighting: checked,
+                    answer_options: updatedOptions as AnswerOption[]
+                  })
+                }}
+                className="rounded border-white/20 bg-white/5 text-brand-500 focus:ring-brand-500 w-3.5 h-3.5"
+              />
+              Enable Custom Weighting (Percentages)
+            </label>
+          </div>
           <OptionEditor 
             options={options} 
             onChange={(opts) => {
@@ -209,6 +319,7 @@ function QuestionEditor({ question, onUpdate, onSaveOptions }: { question: Quest
               onUpdate({ answer_options: opts as AnswerOption[] })
             }} 
             multiCorrect={question.type === 'multi_select'} 
+            customWeighting={question.custom_weighting}
           />
         </div>
       )}

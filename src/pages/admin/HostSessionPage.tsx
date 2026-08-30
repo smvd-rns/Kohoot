@@ -382,16 +382,20 @@ export default function HostSessionPage() {
                 {options.map((opt, i) => {
                   const count = answers.filter(a => a.selected_option_ids?.includes(opt.id)).length
                   const height = Math.max(10, answers.length ? (count / answers.length) * 100 : 0)
+                  const isCorrect = currentQ?.custom_weighting ? (opt.weight ?? 0) > 0 : opt.is_correct
+                  const optWeight = opt.weight ?? (opt.is_correct ? 100 : 0)
+                  const label = currentQ?.custom_weighting ? `${opt.text} (${optWeight}%)` : opt.text
+                  
                   return (
                     <div key={opt.id} className="flex flex-col items-center gap-2 flex-1 max-w-[120px]">
                       <span className="font-bold text-xl">{count}</span>
                       <motion.div
                         initial={{ height: 0 }} animate={{ height: `${height}%` }}
-                        className={cn("w-full rounded-t-xl transition-all", opt.is_correct ? 'opacity-100' : 'opacity-40')}
+                        className={cn("w-full rounded-t-xl transition-all", isCorrect ? 'opacity-100' : 'opacity-40')}
                         style={{ background: ANSWER_COLORS[i % ANSWER_COLORS.length] }}
                       />
-                      <div className="w-full truncate text-center text-sm font-bold" style={{ color: opt.is_correct ? '#22c55e' : 'var(--color-text-secondary)' }}>
-                        {opt.is_correct && '✓ '} {opt.text}
+                      <div className="w-full truncate text-center text-sm font-bold" style={{ color: isCorrect ? '#22c55e' : 'var(--color-text-secondary)' }}>
+                        {isCorrect && '✓ '} {label}
                       </div>
                     </div>
                   )

@@ -236,27 +236,47 @@ export default function SelfPacedPlayPage() {
     if (!currentQ || !participantId || hasAnswered) return
     if (timerRef.current) clearInterval(timerRef.current)
     const timeTaken = Date.now() - answerStartTime.current
-    const correctIds = currentQ.answer_options?.filter(o => o.is_correct).map(o => o.id) ?? []
-    const correct = sel.length > 0 && sel.every(id => correctIds.includes(id)) && sel.length === correctIds.length
+    
+    let correct = false
+    let earned = 0
 
-    // Dynamic scoring for self-paced (80% base points, 20% speed bonus)
-    const maxPoints = currentQ.points || 1000
-    const timeRatio = Math.min(1, timeTaken / (currentQ.time_limit * 1000))
-    const basePoints = maxPoints * 0.8
-    const speedBonus = maxPoints * 0.2 * (1 - timeRatio)
-    const earned = correct ? Math.round(basePoints + speedBonus) : 0
+    if (currentQ.custom_weighting) {
+      const selectedWeightsSum = sel.reduce((sum, id) => {
+        const opt = currentQ.answer_options?.find(o => o.id === id)
+        return sum + (opt?.weight ?? 0)
+      }, 0)
+      const weightRatio = Math.min(100, selectedWeightsSum) / 100
+
+      const maxPoints = currentQ.points || 1000
+      const timeRatio = Math.min(1, timeTaken / (currentQ.time_limit * 1000))
+      const basePoints = maxPoints * 0.8
+      const speedBonus = maxPoints * 0.2 * (1 - timeRatio)
+
+      earned = Math.round((basePoints + speedBonus) * weightRatio)
+      correct = weightRatio > 0
+    } else {
+      const correctIds = currentQ.answer_options?.filter(o => o.is_correct).map(o => o.id) ?? []
+      correct = sel.length > 0 && sel.every(id => correctIds.includes(id)) && sel.length === correctIds.length
+
+      const maxPoints = currentQ.points || 1000
+      const timeRatio = Math.min(1, timeTaken / (currentQ.time_limit * 1000))
+      const basePoints = maxPoints * 0.8
+      const speedBonus = maxPoints * 0.2 * (1 - timeRatio)
+
+      earned = correct ? Math.round(basePoints + speedBonus) : 0
+    }
 
     setHasAnswered(true)
     setIsCorrect(correct)
     setPointsEarned(earned)
-    if (correct) setScore(s => s + earned)
+    if (earned > 0) setScore(s => s + earned)
 
     try {
       await quizService.submitAnswer(participantId, sessionId!, currentQ.id, sel, '', timeTaken, correct, earned)
     } catch (err) {
       console.error('Failed to submit answer:', err)
       setHasAnswered(false)
-      if (correct) setScore(s => s - earned)
+      if (earned > 0) setScore(s => s - earned)
       toast.error('Network issue: Failed to save your answer. Please click Submit again.')
     }
   }
