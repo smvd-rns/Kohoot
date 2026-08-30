@@ -92,7 +92,7 @@ export function applyTheme(theme: QuizTheme): void {
 }
 
 export const QUESTION_TYPE_LABELS: Record<string, string> = {
-  multiple_choice: 'Multiple Choice',
+  multiple_choice: 'Single Option Select',
   true_false:      'True / False',
   multi_select:    'Multi Select',
   fill_blank:      'Fill in the Blank',

@@ -108,7 +108,7 @@ function OptionEditor({
                   value={opt.weight ?? (opt.is_correct ? 100 : 0)}
                   onChange={e => {
                     const otherSum = options.reduce((sum, o, idx) => idx === i ? sum : sum + (o.weight ?? (o.is_correct ? 100 : 0)), 0)
-                    const maxAllowed = Math.max(0, 100 - otherSum)
+                    const maxAllowed = multiCorrect ? Math.max(0, 100 - otherSum) : 100
                     const val = Math.min(maxAllowed, Math.max(0, Number(e.target.value) || 0))
                     const next = [...options]
                     next[i] = { ...next[i], weight: val, is_correct: val > 0 }
@@ -124,7 +124,7 @@ function OptionEditor({
                   const next = [...options]
                   const currentWeight = next[i].weight ?? (next[i].is_correct ? 100 : 0)
                   const otherSum = options.reduce((sum, o, idx) => idx === i ? sum : sum + (o.weight ?? (o.is_correct ? 100 : 0)), 0)
-                  const maxAllowed = Math.max(0, 100 - otherSum)
+                  const maxAllowed = multiCorrect ? Math.max(0, 100 - otherSum) : 100
                   const newVal = currentWeight > 0 ? 0 : maxAllowed
                   next[i] = { ...next[i], weight: newVal, is_correct: newVal > 0 }
                   onChange(next)

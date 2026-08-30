@@ -26,7 +26,7 @@ const stats = [
 const themeColors = ['#7c6fef', '#00f0ff', '#1e6ea7', '#16a34a', '#10b981', '#ff6b35', '#6366f1']
 
 const questionTypes = [
-  '✅ Multiple Choice', '🔵 True / False', '✨ Multi Select',
+  '✅ Single Option Select', '🔵 True / False', '✨ Multi Select',
   '✍️ Fill in the Blank', '🖼️ Image Questions', '🎵 Audio Questions',
   '🎬 Video Questions', '📊 Polls', '🧩 Puzzle Arrange', '💬 Open Ended',
 ]

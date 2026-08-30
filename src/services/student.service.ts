@@ -19,14 +19,24 @@ export const studentService = {
     if (!participations || participations.length === 0) return []
     const studentIds = Array.from(new Set(participations.map(p => p.student_id)))
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .in('id', studentIds)
-      .order('created_at', { ascending: false })
+    // Batch fetching profiles in chunks of 100 to avoid URI too large / 400 Bad Request errors
+    const batchSize = 100
+    let allProfiles: Profile[] = []
 
-    if (error) throw error
-    return data ?? []
+    for (let i = 0; i < studentIds.length; i += batchSize) {
+      const batchIds = studentIds.slice(i, i + batchSize)
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .in('id', batchIds)
+      
+      if (error) throw error
+      if (data) {
+        allProfiles = [...allProfiles, ...data]
+      }
+    }
+
+    return allProfiles.sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime())
   },
 
   async getAllStudents(): Promise<Profile[]> {

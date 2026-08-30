@@ -25,7 +25,7 @@ export default function AnalyticsPage() {
   ])
 
   const [questionTypes, setQuestionTypes] = useState([
-    { name: 'Multiple Choice', value: 0 },
+    { name: 'Single Option Select', value: 0 },
     { name: 'True/False',      value: 0 },
     { name: 'Multi-Select',    value: 0 },
     { name: 'Fill-in-the-blank', value: 0 },
@@ -76,7 +76,7 @@ export default function AnalyticsPage() {
           })
           
           setQuestionTypes([
-            { name: 'Multiple Choice', value: typeCounts.multiple_choice },
+            { name: 'Single Option Select', value: typeCounts.multiple_choice },
             { name: 'True/False',      value: typeCounts.true_false },
             { name: 'Multi-Select',    value: typeCounts.multi_select },
             { name: 'Fill-in-the-blank', value: typeCounts.fill_blank },
