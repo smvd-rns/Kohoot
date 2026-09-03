@@ -30,10 +30,10 @@ type ParticipantWithResponses = SessionParticipant & {
 }
 
 type ReportData = {
-  session: QuizSession & { quiz?: { title: string; description?: string; thumbnail_url?: string; theme?: string; question_count: number; passing_score: number } }
+  session: QuizSession & { quiz?: { title: string; description?: string; thumbnail_url?: string; theme?: string; question_count: number; passing_score: number; max_score?: number } }
   customFields: CustomField[]
   participants: ParticipantWithResponses[]
-  quizzes?: Array<{ id: string; title: string }>
+  quizzes?: Array<{ id: string; title: string; max_score?: number }>
   answers?: any[]
 }
 
@@ -259,19 +259,28 @@ export default function ReportsPage() {
     toast.success('Report exported successfully!')
   }
 
+  // Total Max Score calculation
+  const totalMaxScore = useMemo(() => {
+    if (!report) return 0
+    if (report.quizzes && report.quizzes.length > 0) {
+      return report.quizzes.reduce((sum, q) => sum + (q.max_score || 0), 0)
+    }
+    return (report.session.quiz as any)?.max_score || (report.session.quiz?.question_count || 0) * 1000
+  }, [report])
+
   // Export unified report — respects active filters
   const handleExportReport = () => {
     if (!report) return
     const customHeaders = report.customFields.map(f => f.label)
     
     const isMultiQuiz = report.quizzes && report.quizzes.length > 1
-    const quizHeaders = isMultiQuiz ? report.quizzes!.map(q => `${q.title} Score`) : []
+    const quizHeaders = isMultiQuiz ? report.quizzes!.map(q => `${q.title} Score (Out of ${q.max_score || 0})`) : []
     
     const headers = [
       'Rank', 
       'Participant Name', 
       ...quizHeaders,
-      isMultiQuiz ? 'Total Score' : 'Score', 
+      isMultiQuiz ? `Total Score (Out of ${totalMaxScore})` : `Score (Out of ${totalMaxScore})`, 
       'Correct Answers', 
       'Wrong Answers', 
       'Accuracy (%)', 
@@ -287,14 +296,14 @@ export default function ReportsPage() {
         const score = report.answers
           ?.filter(a => a.participant_id === p.id && a.question?.quiz_id === quiz.id)
           ?.reduce((sum, a) => sum + a.points_earned, 0) ?? 0
-        return `${score} pts`
+        return `${score}/${quiz.max_score || 0}`
       }) : []
 
       const row = [
         (idx + 1).toString(),
         p.display_name,
         ...quizScores,
-        p.score.toString(),
+        `${p.score}/${totalMaxScore}`,
         p.correct_answers.toString(),
         p.wrong_answers.toString(),
         `${accuracy}%`,
@@ -789,10 +798,13 @@ export default function ReportsPage() {
                             {renderSortHeader('student', 'Student')}
                             {isMultiQuiz && report.quizzes?.map(q => (
                               <th key={q.id} className="py-3 px-4 text-right select-none text-theme-secondary text-xs font-bold uppercase">
-                                <span title={q.title}>{q.title.length > 12 ? q.title.slice(0, 12) + '...' : q.title}</span>
+                                <span title={q.title}>
+                                  {q.title.length > 12 ? q.title.slice(0, 12) + '...' : q.title}
+                                  {q.max_score ? ` (/${q.max_score})` : ''}
+                                </span>
                               </th>
                             ))}
-                            {renderSortHeader('score', isMultiQuiz ? 'Total Score' : 'Score', 'right')}
+                            {renderSortHeader('score', isMultiQuiz ? `Total Score${totalMaxScore > 0 ? ` (/${totalMaxScore})` : ''}` : `Score${totalMaxScore > 0 ? ` (/${totalMaxScore})` : ''}`, 'right')}
                             {renderSortHeader('correct', 'Correct', 'center')}
                             {renderSortHeader('wrong', 'Wrong', 'center')}
                             {renderSortHeader('accuracy', 'Accuracy', 'right')}
@@ -838,11 +850,13 @@ export default function ReportsPage() {
                                 ?.reduce((sum, a) => sum + a.points_earned, 0) ?? 0
                               return (
                                 <td key={quiz.id} className="py-3 px-4 text-right font-semibold text-brand-400">
-                                  {score} pts
+                                  {score} / {quiz.max_score || 0} pts
                                 </td>
                               )
                             })}
-                            <td className="py-3 px-4 text-right font-bold text-theme-primary">{p.score} pts</td>
+                            <td className="py-3 px-4 text-right font-bold text-theme-primary">
+                              {p.score}{totalMaxScore > 0 ? ` / ${totalMaxScore}` : ''} pts
+                            </td>
                             <td className="py-3 px-4 text-center text-success-400 font-semibold">{p.correct_answers}</td>
                             <td className="py-3 px-4 text-center text-danger-400 font-semibold">{p.wrong_answers}</td>
                             <td className="py-3 px-4 text-right">

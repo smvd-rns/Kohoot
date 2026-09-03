@@ -10,6 +10,8 @@ import { quizService } from '@/services/quiz.service'
 import { cn } from '@/lib/utils'
 import type { QuizSession, Question, LeaderboardEntry } from '@/types'
 
+import { MultiQuizTransitScreen } from '@/components/MultiQuizTransitScreen'
+
 const ANSWER_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
 const ANSWER_ICONS = ['▲', '◆', '●', '★']
 import { BACKGROUND_MUSIC } from '@/lib/music'
@@ -22,6 +24,7 @@ export default function HostSessionPage() {
   const [session, setSession] = useState<QuizSession | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
   const [currentQ, setCurrentQ] = useState<Question | null>(null)
+  const [multiQuizList, setMultiQuizList] = useState<Array<{ id: string; title: string }>>([])
   
   const [participants, setParticipants] = useState<{ id: string; display_name: string; avatar_seed: string }[]>([])
   const [answers, setAnswers] = useState<{ participant_id: string; selected_option_ids: string[] }[]>([])
@@ -51,6 +54,14 @@ export default function HostSessionPage() {
     try {
       const s = await quizService.getSession(sessionId)
       setSession(s as unknown as QuizSession)
+      
+      if (s.quiz_ids && s.quiz_ids.length > 0) {
+        const { data: qData } = await supabase.from('quizzes').select('id, title').in('id', s.quiz_ids)
+        if (qData) {
+          const ordered = s.quiz_ids.map((id: string) => qData.find((q: any) => q.id === id) || { id, title: 'Quiz' })
+          setMultiQuizList(ordered)
+        }
+      }
       
       if (s.quiz?.background_music_url) {
         setMusicUrl(s.quiz.background_music_url)
@@ -399,32 +410,13 @@ export default function HostSessionPage() {
             ))}
           </div>
         ) : hostState === 'transit' ? (
-          <div className="w-full max-w-xl flex flex-col items-center justify-center text-center p-8 glass-strong rounded-3xl border border-white/10 shadow-2xl space-y-6 flex-1 my-8">
-            <div className="text-7xl animate-bounce">📢</div>
-            <h2 className="text-4xl font-black text-theme-primary">Time for the Next Quiz!</h2>
-            {session && (
-              <div className="space-y-4 w-full">
-                <p className="text-theme-secondary text-sm">
-                  The previous quiz is complete. Up next is the next challenge!
-                </p>
-                {(() => {
-                  const currentQuizIdx = session.quiz_ids?.indexOf(session.current_quiz_id ?? '') ?? -1
-                  return (
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
-                      {session.transition_messages && (
-                        <p className="text-sm italic text-brand-300 font-semibold leading-relaxed">
-                          "{session.transition_messages[currentQuizIdx] || 'Get ready, the next quiz is starting!'}"
-                        </p>
-                      )}
-                    </div>
-                  )
-                })()}
-                <Button size="xl" className="w-full" leftIcon={<Play className="w-5 h-5" />} onClick={handleStartNextQuiz}>
-                  Start Next Quiz
-                </Button>
-              </div>
-            )}
-          </div>
+          <MultiQuizTransitScreen
+            quizList={multiQuizList}
+            currentQuizId={session?.current_quiz_id || session?.quiz_id}
+            transitionMessages={session?.transition_messages}
+            isHost={true}
+            onStartNextQuiz={handleStartNextQuiz}
+          />
         ) : (
           <div className="w-full max-w-4xl flex flex-col items-center relative">
             {fastestParticipant && (
@@ -445,31 +437,36 @@ export default function HostSessionPage() {
               {currentQ?.text}
             </h2>
 
-            {hostState === 'results' ? (
-              <div className="w-full h-64 flex items-end justify-center gap-6 mt-8">
-                {options.map((opt, i) => {
-                  const count = answers.filter(a => a.selected_option_ids?.includes(opt.id)).length
-                  const height = Math.max(10, answers.length ? (count / answers.length) * 100 : 0)
-                  const isCorrect = currentQ?.custom_weighting ? (opt.weight ?? 0) > 0 : opt.is_correct
-                  const optWeight = opt.weight ?? (opt.is_correct ? 100 : 0)
-                  const label = currentQ?.custom_weighting ? `${opt.text} (${optWeight}%)` : opt.text
-                  
-                  return (
-                    <div key={opt.id} className="flex flex-col items-center gap-2 flex-1 max-w-[120px]">
-                      <span className="font-bold text-xl">{count}</span>
-                      <motion.div
-                        initial={{ height: 0 }} animate={{ height: `${height}%` }}
-                        className={cn("w-full rounded-t-xl transition-all", isCorrect ? 'opacity-100' : 'opacity-40')}
-                        style={{ background: ANSWER_COLORS[i % ANSWER_COLORS.length] }}
-                      />
-                      <div className="w-full truncate text-center text-sm font-bold" style={{ color: isCorrect ? '#22c55e' : 'var(--color-text-secondary)' }}>
-                        {isCorrect && '✓ '} {label}
+            {hostState === 'results' ? (() => {
+              const hostMaxWeight = options.reduce((m, o) => Math.max(m, o.weight ?? (o.is_correct ? 100 : 0)), 0)
+              return (
+                <div className="w-full h-64 flex items-end justify-center gap-6 mt-8">
+                  {options.map((opt, i) => {
+                    const count = answers.filter(a => a.selected_option_ids?.includes(opt.id)).length
+                    const height = Math.max(10, answers.length ? (count / answers.length) * 100 : 0)
+                    const optWeight = opt.weight ?? (opt.is_correct ? 100 : 0)
+                    const isTopAnswer = optWeight === hostMaxWeight && hostMaxWeight > 0
+                    const isPartial = currentQ?.custom_weighting && optWeight > 0 && !isTopAnswer
+                    const isCorrect = isTopAnswer || (!currentQ?.custom_weighting && opt.is_correct)
+                    const label = currentQ?.custom_weighting ? `${opt.text} (${optWeight}%)` : opt.text
+
+                    return (
+                      <div key={opt.id} className="flex flex-col items-center gap-2 flex-1 max-w-[120px]">
+                        <span className="font-bold text-xl">{count}</span>
+                        <motion.div
+                          initial={{ height: 0 }} animate={{ height: `${height}%` }}
+                          className={cn("w-full rounded-t-xl transition-all", isCorrect ? 'opacity-100' : isPartial ? 'opacity-70' : 'opacity-40')}
+                          style={{ background: ANSWER_COLORS[i % ANSWER_COLORS.length] }}
+                        />
+                        <div className="w-full truncate text-center text-sm font-bold" style={{ color: isCorrect ? '#22c55e' : isPartial ? '#38bdf8' : 'var(--color-text-secondary)' }}>
+                          {isCorrect ? '✓ ' : isPartial ? '⭐ ' : ''}{label}
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : (
+                    )
+                  })}
+                </div>
+              )
+            })() : (
               <div className="grid grid-cols-2 gap-4 w-full">
                 {options.map((opt, i) => (
                   <div

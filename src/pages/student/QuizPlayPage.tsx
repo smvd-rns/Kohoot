@@ -11,6 +11,8 @@ import { cn, getTheme, getEmbedUrl } from '@/lib/utils'
 import type { Question, AnswerOption, LeaderboardEntry, Quiz, QuizSession } from '@/types'
 import toast from 'react-hot-toast'
 
+import { MultiQuizTransitScreen } from '@/components/MultiQuizTransitScreen'
+
 const ANSWER_COLORS = ['#e21b3c', '#1368ce', '#d89e00', '#26890c']
 const ANSWER_ICONS = ['▲', '◆', '●', '★']
 const ANSWER_LABELS = ['A', 'B', 'C', 'D']
@@ -117,6 +119,7 @@ export default function QuizPlayPage() {
   const [quiz, setQuiz] = useState<Quiz | null>(null)
   const [isTransit, setIsTransit] = useState(false)
   const [session, setSession] = useState<QuizSession | null>(null)
+  const [multiQuizList, setMultiQuizList] = useState<Array<{ id: string; title: string }>>([])
   const answerStartTime = useRef(Date.now())
   const audioRef = useRef<HTMLAudioElement>(null)
 
@@ -147,6 +150,14 @@ export default function QuizPlayPage() {
       setSession(session as unknown as QuizSession)
       setIsTransit(false)
       
+      if (session.quiz_ids && session.quiz_ids.length > 0) {
+        const { data: qData } = await supabase.from('quizzes').select('id, title').in('id', session.quiz_ids)
+        if (qData) {
+          const ordered = session.quiz_ids.map((id: string) => qData.find((q: any) => q.id === id) || { id, title: 'Quiz' })
+          setMultiQuizList(ordered)
+        }
+      }
+
       if (session.quiz) {
         setQuiz(session.quiz as unknown as Quiz)
       }
@@ -352,24 +363,13 @@ export default function QuizPlayPage() {
 
   if (isTransit) {
     return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center p-6 text-center" style={{ background: 'linear-gradient(135deg, var(--color-bg-primary), var(--color-bg-secondary))' }}>
-        <div className="max-w-md w-full glass-strong p-8 rounded-3xl border border-white/10 shadow-2xl space-y-6">
-          <div className="text-6xl animate-bounce">🏁</div>
-          <h2 className="text-3xl font-black text-white">Quiz Finished!</h2>
-          <p className="text-theme-secondary text-sm leading-relaxed">
-            Get ready for the next quiz in this event.
-          </p>
-          {session?.transition_messages && (
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 italic text-theme-primary text-sm font-medium">
-              "{session.transition_messages[session.quiz_ids?.indexOf(session.current_quiz_id ?? '') ?? 0] || 'Stay tuned, the next quiz is starting soon!'}"
-            </div>
-          )}
-          <div className="flex items-center justify-center gap-2 text-xs text-brand-400 font-bold animate-pulse">
-            <span className="w-2 h-2 rounded-full bg-brand-400" />
-            Waiting for Host to start...
-          </div>
-        </div>
-      </div>
+      <MultiQuizTransitScreen
+        quizList={multiQuizList}
+        currentQuizId={session?.current_quiz_id || session?.quiz_id}
+        transitionMessages={session?.transition_messages}
+        isHost={false}
+        isSelfPaced={false}
+      />
     )
   }
 
@@ -518,42 +518,70 @@ export default function QuizPlayPage() {
           </div>
 
           {/* Options */}
-          {['multiple_choice', 'true_false', 'multi_select', 'poll', 'image_based', 'video_based'].includes(currentQ.type) && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {shuffledOptions.map((opt, i) => {
-                const color = ANSWER_COLORS[i % ANSWER_COLORS.length]
-                const isSelected = selected.includes(opt.id)
-                const showCorrect = hasAnswered && opt.is_correct
-                const showWrong = hasAnswered && isSelected && !opt.is_correct
+          {['multiple_choice', 'true_false', 'multi_select', 'poll', 'image_based', 'video_based'].includes(currentQ.type) && (() => {
+            const maxWeight = currentQ.answer_options?.reduce((max, o) => Math.max(max, o.weight ?? (o.is_correct ? 100 : 0)), 0) ?? 100
+            const selectedOpt = currentQ.answer_options?.find(o => selected.includes(o.id))
+            const selectedWeight = selectedOpt ? (selectedOpt.weight ?? (selectedOpt.is_correct ? 100 : 0)) : 0
+            const selectedIsMax = selectedOpt && selectedWeight === maxWeight && maxWeight > 0
 
-                return (
-                  <motion.button
-                    key={opt.id}
-                    whileHover={!hasAnswered ? { scale: 1.03 } : undefined}
-                    whileTap={!hasAnswered ? { scale: 0.97 } : undefined}
-                    onClick={() => handleAnswer(opt.id)}
-                    disabled={hasAnswered && !isMulti}
-                    className={cn(
-                      'relative p-4 rounded-2xl text-white font-bold text-left transition-all text-sm sm:text-base',
-                      'flex items-center gap-3',
-                      showCorrect && 'ring-4 ring-green-400 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.4)]',
-                      showWrong && 'opacity-30',
-                      isSelected && !hasAnswered && 'ring-4 ring-white'
-                    )}
-                    style={{
-                      background: showCorrect ? '#22c55e' : showWrong ? '#ef4444' : color,
-                      opacity: hasAnswered && !showCorrect && !showWrong ? 0.6 : 1,
-                    }}
-                  >
-                    <span className="text-xl opacity-70 flex-shrink-0">{ANSWER_ICONS[i % 4]}</span>
-                    <span className="flex-1">{opt.text}</span>
-                    {showCorrect && <CheckCircle className="w-5 h-5 ml-auto flex-shrink-0 text-white" />}
-                    {showWrong && <XCircle className="w-5 h-5 ml-auto flex-shrink-0 text-white" />}
-                  </motion.button>
-                )
-              })}
-            </div>
-          )}
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {shuffledOptions.map((opt, i) => {
+                  const color = ANSWER_COLORS[i % ANSWER_COLORS.length]
+                  const isSelected = selected.includes(opt.id)
+                  const optWeight = opt.weight ?? (opt.is_correct ? 100 : 0)
+
+                  let showCorrect = false
+                  let showWrong = false
+
+                  if (hasAnswered) {
+                    if (isMulti) {
+                      showCorrect = optWeight > 0 || opt.is_correct
+                      showWrong = isSelected && !showCorrect
+                    } else {
+                      if (isSelected) {
+                        showCorrect = optWeight > 0
+                        showWrong = !showCorrect
+                      } else {
+                        showCorrect = !selectedIsMax && optWeight === maxWeight && maxWeight > 0
+                      }
+                    }
+                  }
+
+                  return (
+                    <motion.button
+                      key={opt.id}
+                      whileHover={!hasAnswered ? { scale: 1.03 } : undefined}
+                      whileTap={!hasAnswered ? { scale: 0.97 } : undefined}
+                      onClick={() => handleAnswer(opt.id)}
+                      disabled={hasAnswered && !isMulti}
+                      className={cn(
+                        'relative p-4 rounded-2xl text-white font-bold text-left transition-all text-sm sm:text-base',
+                        'flex items-center gap-3',
+                        showCorrect && 'ring-4 ring-green-400 scale-105 shadow-[0_0_20px_rgba(34,197,94,0.4)]',
+                        showWrong && 'opacity-30',
+                        isSelected && !hasAnswered && 'ring-4 ring-white'
+                      )}
+                      style={{
+                        background: showCorrect ? '#22c55e' : showWrong ? '#ef4444' : color,
+                        opacity: hasAnswered && !showCorrect && !showWrong ? 0.6 : 1,
+                      }}
+                    >
+                      <span className="text-xl opacity-70 flex-shrink-0">{ANSWER_ICONS[i % 4]}</span>
+                      <span className="flex-1">{opt.text}</span>
+                      {currentQ.custom_weighting && hasAnswered && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-black/30 text-white/90 border border-white/20 flex-shrink-0">
+                          {optWeight}%
+                        </span>
+                      )}
+                      {showCorrect && <CheckCircle className="w-5 h-5 ml-auto flex-shrink-0 text-white" />}
+                      {showWrong && <XCircle className="w-5 h-5 ml-auto flex-shrink-0 text-white" />}
+                    </motion.button>
+                  )
+                })}
+              </div>
+            )
+          })()}
 
           {/* Fill blank */}
           {currentQ.type === 'fill_blank' && !hasAnswered && (

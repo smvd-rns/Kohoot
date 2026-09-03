@@ -311,6 +311,49 @@ export const quizService = {
     return data
   },
 
+  async updateSessionDetails(id: string, opts: {
+    title?: string;
+    quizId: string;
+    quizIds?: string[];
+    transitionMessages?: string[];
+    mode?: 'live' | 'self_paced';
+    participantMode?: 'any' | 'registered_only';
+    deadline?: string | null;
+  }) {
+    const finalQuizIds = opts.quizIds && opts.quizIds.length > 0 ? opts.quizIds : [opts.quizId]
+    const currentQuizId = finalQuizIds[0]
+
+    const updates: Record<string, unknown> = {
+      title: opts.title || null,
+      quiz_id: opts.quizId,
+      quiz_ids: finalQuizIds,
+      current_quiz_id: currentQuizId,
+      transition_messages: opts.transitionMessages ?? [],
+    }
+
+    if (opts.mode) {
+      updates.mode = opts.mode
+      if (opts.mode === 'self_paced') {
+        updates.status = 'self_paced'
+      }
+    }
+    if (opts.participantMode) {
+      updates.participant_mode = opts.participantMode
+    }
+    if (opts.deadline !== undefined) {
+      updates.deadline = opts.deadline
+    }
+
+    const { data, error } = await supabase
+      .from('quiz_sessions')
+      .update(updates)
+      .eq('id', id)
+      .select('*, quiz:quizzes!current_quiz_id(*)')
+      .single()
+    if (error) throw error
+    return data
+  },
+
 
   async advanceQuestion(sessionId: string, index: number) {
     const { error } = await supabase
@@ -559,7 +602,7 @@ export const quizService = {
   async getSessionReport(sessionId: string) {
     const { data: session, error: sessionErr } = await supabase
       .from('quiz_sessions')
-      .select('*, quiz:quizzes!current_quiz_id(*)')
+      .select('*, quiz:quizzes!current_quiz_id(*, questions(points))')
       .eq('id', sessionId)
       .single()
     if (sessionErr) throw sessionErr
@@ -585,14 +628,26 @@ export const quizService = {
     if (partErr) throw partErr
 
     // Fetch quiz details and answers for multi-quiz breakdown reports
-    let quizzes: Array<{ id: string; title: string }> = []
+    let quizzes: Array<{ id: string; title: string; question_count?: number; max_score?: number }> = []
     let answers: any[] = []
     if (session.quiz_ids && session.quiz_ids.length > 0) {
       const { data: qData } = await supabase
         .from('quizzes')
-        .select('id, title')
+        .select('id, title, question_count, questions(points)')
         .in('id', session.quiz_ids)
-      if (qData) quizzes = qData
+      if (qData) {
+        quizzes = qData.map((q: any) => {
+          const max_score = q.questions && q.questions.length > 0
+            ? q.questions.reduce((sum: number, question: any) => sum + (question.points || 1000), 0)
+            : (q.question_count || 0) * 1000
+          return {
+            id: q.id,
+            title: q.title,
+            question_count: q.question_count,
+            max_score
+          }
+        })
+      }
       
       const { data: aData } = await supabase
         .from('participant_answers')
@@ -601,8 +656,21 @@ export const quizService = {
       if (aData) answers = aData
     }
 
+    let mainQuizMaxScore = 0
+    if (session.quiz) {
+      const qList = (session.quiz as any).questions
+      if (qList && qList.length > 0) {
+        mainQuizMaxScore = qList.reduce((sum: number, q: any) => sum + (q.points || 1000), 0)
+      } else {
+        mainQuizMaxScore = ((session.quiz as any).question_count || 0) * 1000
+      }
+    }
+
     return {
-      session,
+      session: {
+        ...session,
+        quiz: session.quiz ? { ...session.quiz, max_score: mainQuizMaxScore } : undefined
+      },
       customFields,
       participants: participants || [],
       quizzes,

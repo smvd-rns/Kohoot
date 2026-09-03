@@ -19,7 +19,7 @@ export default function ResultsPage() {
   const [showConfetti, setShowConfetti] = useState(true)
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight })
   const [sessionMode, setSessionMode] = useState<'live' | 'self_paced'>('live')
-  const [quizBreakdown, setQuizBreakdown] = useState<Array<{ quizId: string; title: string; score: number }>>([])
+  const [quizBreakdown, setQuizBreakdown] = useState<Array<{ quizId: string; title: string; score: number; maxScore: number }>>([])
 
   useEffect(() => {
     window.addEventListener('resize', () => setWindowSize({ width: window.innerWidth, height: window.innerHeight }))
@@ -37,7 +37,7 @@ export default function ResultsPage() {
             
           const { data: qData } = await supabase
             .from('quizzes')
-            .select('id, title')
+            .select('id, title, question_count, questions(points)')
             .in('id', session.quiz_ids)
 
           if (answers && qData) {
@@ -48,10 +48,15 @@ export default function ResultsPage() {
                 const score = answers
                   .filter(a => (a.question as any)?.quiz_id === qid && a.participant_id === myPart.id)
                   .reduce((sum, a) => sum + a.points_earned, 0)
+                const qList = (qInfo as any)?.questions
+                const maxScore = qList && qList.length > 0
+                  ? qList.reduce((sum: number, q: any) => sum + (q.points || 1000), 0)
+                  : ((qInfo?.question_count || 0) * 1000)
                 return {
                   quizId: qid,
                   title: qInfo?.title ?? 'Quiz',
-                  score
+                  score,
+                  maxScore
                 }
               })
               setQuizBreakdown(breakdown)
@@ -131,12 +136,14 @@ export default function ResultsPage() {
                 {quizBreakdown.map((item, idx) => (
                   <div key={item.quizId} className="flex justify-between items-center text-xs font-semibold">
                     <span className="text-theme-secondary truncate max-w-[200px]">{idx + 1}. {item.title}</span>
-                    <span className="text-brand-400 font-bold">{item.score.toLocaleString()} pts</span>
+                    <span className="text-brand-400 font-bold">{item.score.toLocaleString()} / {item.maxScore.toLocaleString()} pts</span>
                   </div>
                 ))}
                 <div className="flex justify-between items-center text-xs font-extrabold border-t border-white/10 pt-2 mt-2">
                   <span className="text-white">Total Score</span>
-                  <span className="text-brand-400 font-black">{quizBreakdown.reduce((sum, item) => sum + item.score, 0).toLocaleString()} pts</span>
+                  <span className="text-brand-400 font-black">
+                    {quizBreakdown.reduce((sum, item) => sum + item.score, 0).toLocaleString()} / {quizBreakdown.reduce((sum, item) => sum + item.maxScore, 0).toLocaleString()} pts
+                  </span>
                 </div>
               </div>
             )}
@@ -149,7 +156,7 @@ export default function ResultsPage() {
               <h1 className="text-4xl font-black text-white mb-2">{grade.label}</h1>
               {myResult && (
                 <>
-                  <p className="text-theme-secondary mb-4">You scored <span className="text-white font-black">{myResult.score.toLocaleString()} points</span></p>
+                  <p className="text-theme-secondary mb-4">You scored <span className="text-white font-black">{myResult.score.toLocaleString()}{quizBreakdown.length > 0 ? ` / ${quizBreakdown.reduce((sum, item) => sum + item.maxScore, 0).toLocaleString()}` : ''} points</span></p>
                   <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full glass-strong">
                     <Trophy className="w-5 h-5 text-warning-400" />
                     <span className="text-xl font-black text-white">Rank #{myResult.rank}</span>
@@ -168,13 +175,13 @@ export default function ResultsPage() {
                   {quizBreakdown.map((item, idx) => (
                     <div key={item.quizId} className="flex justify-between items-center text-sm font-semibold p-2 rounded-xl hover:bg-white/3 transition-all">
                       <span className="text-theme-secondary truncate max-w-[250px]">{idx + 1}. {item.title}</span>
-                      <span className="text-brand-400 text-right shrink-0">{item.score.toLocaleString()} pts</span>
+                      <span className="text-brand-400 text-right shrink-0">{item.score.toLocaleString()} / {item.maxScore.toLocaleString()} pts</span>
                     </div>
                   ))}
                   <div className="flex justify-between items-center text-base font-extrabold border-t border-white/10 pt-3 mt-1">
                     <span className="text-white">Total Score</span>
                     <span className="text-brand-400">
-                      {quizBreakdown.reduce((sum, item) => sum + item.score, 0).toLocaleString()} pts
+                      {quizBreakdown.reduce((sum, item) => sum + item.score, 0).toLocaleString()} / {quizBreakdown.reduce((sum, item) => sum + item.maxScore, 0).toLocaleString()} pts
                     </span>
                   </div>
                 </div>

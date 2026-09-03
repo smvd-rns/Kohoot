@@ -306,15 +306,41 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
     toast.success('Report exported successfully!')
   }
 
+  const totalMaxScore = useMemo(() => {
+    if (!report) return 0
+    if (report.quizzes && report.quizzes.length > 0) {
+      return report.quizzes.reduce((sum: number, q: any) => sum + (q.max_score || 0), 0)
+    }
+    return report.session.quiz?.max_score || (report.session.quiz?.question_count || 0) * 1000
+  }, [report])
+
   const handleExportReport = () => {
     if (!report) return
     const customHeaders = report.customFields?.map((f: any) => f.label) ?? []
-    const headers = ['Rank', 'Participant Name', 'Score', 'Correct Answers', 'Wrong Answers', 'Accuracy (%)', 'Joined At', ...customHeaders]
+    const isMultiQuiz = report.quizzes && report.quizzes.length > 1
+    const quizHeaders = isMultiQuiz ? report.quizzes.map((q: any) => `${q.title} Score (Out of ${q.max_score || 0})`) : []
+    const headers = [
+      'Rank', 
+      'Participant Name', 
+      ...quizHeaders,
+      isMultiQuiz ? `Total Score (Out of ${totalMaxScore})` : `Score (Out of ${totalMaxScore})`, 
+      'Correct Answers', 
+      'Wrong Answers', 
+      'Accuracy (%)', 
+      'Joined At', 
+      ...customHeaders
+    ]
     const rows = filteredParticipants.map((p: any, idx: number) => {
       const totalQuestions = report.session.quiz?.question_count ?? 0
       const accuracy = totalQuestions > 0 ? Math.round((p.correct_answers / totalQuestions) * 100) : 0
+      const quizScores = isMultiQuiz ? report.quizzes.map((quiz: any) => {
+        const score = report.answers
+          ?.filter((a: any) => a.participant_id === p.id && a.question?.quiz_id === quiz.id)
+          ?.reduce((sum: number, a: any) => sum + a.points_earned, 0) ?? 0
+        return `${score}/${quiz.max_score || 0}`
+      }) : []
       const row = [
-        (idx + 1).toString(), p.display_name, p.score.toString(),
+        (idx + 1).toString(), p.display_name, ...quizScores, `${p.score}/${totalMaxScore}`,
         p.correct_answers.toString(), p.wrong_answers.toString(), `${accuracy}%`,
         formatTimestamp(p.joined_at),
       ]
@@ -548,10 +574,19 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
                           )
                         }
 
+                        const isMultiQuiz = report.quizzes && report.quizzes.length > 1
                         return (
                           <>
                             {renderSortHeader('student', 'Student')}
-                            {renderSortHeader('score', 'Score', 'right')}
+                            {isMultiQuiz && report.quizzes?.map((q: any) => (
+                              <th key={q.id} className="py-3 px-4 text-right select-none text-theme-secondary text-xs font-bold uppercase">
+                                <span title={q.title}>
+                                  {q.title.length > 12 ? q.title.slice(0, 12) + '...' : q.title}
+                                  {q.max_score ? ` (/${q.max_score})` : ''}
+                                </span>
+                              </th>
+                            ))}
+                            {renderSortHeader('score', isMultiQuiz ? `Total Score${totalMaxScore > 0 ? ` (/${totalMaxScore})` : ''}` : `Score${totalMaxScore > 0 ? ` (/${totalMaxScore})` : ''}`, 'right')}
                             {renderSortHeader('correct', 'Correct', 'center')}
                             {renderSortHeader('wrong', 'Wrong', 'center')}
                             {renderSortHeader('accuracy', 'Accuracy', 'right')}
@@ -565,7 +600,7 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
                   <tbody className="divide-y divide-theme/40 text-sm">
                     {filteredParticipants.length === 0 ? (
                       <tr>
-                        <td colSpan={7 + (report.customFields?.length ?? 0)} className="text-center py-12 text-theme-secondary">
+                        <td colSpan={7 + (report.customFields?.length ?? 0) + (report.quizzes && report.quizzes.length > 1 ? report.quizzes.length : 0)} className="text-center py-12 text-theme-secondary">
                           <div className="flex flex-col items-center gap-2">
                             <Search className="w-8 h-8 opacity-30" />
                             <p className="font-semibold">No students match your search</p>
@@ -588,7 +623,19 @@ function AdminActivityView({ admin, onBack, onToggleApproval }: AdminActivityVie
                                 <span className="font-semibold text-theme-primary">{p.display_name}</span>
                               </div>
                             </td>
-                            <td className="py-3 px-4 text-right font-bold text-theme-primary">{p.score} pts</td>
+                            {report.quizzes && report.quizzes.length > 1 && report.quizzes.map((quiz: any) => {
+                              const score = report.answers
+                                ?.filter((a: any) => a.participant_id === p.id && a.question?.quiz_id === quiz.id)
+                                ?.reduce((sum: number, a: any) => sum + a.points_earned, 0) ?? 0
+                              return (
+                                <td key={quiz.id} className="py-3 px-4 text-right font-semibold text-brand-400">
+                                  {score} / {quiz.max_score || 0} pts
+                                </td>
+                              )
+                            })}
+                            <td className="py-3 px-4 text-right font-bold text-theme-primary">
+                              {p.score}{totalMaxScore > 0 ? ` / ${totalMaxScore}` : ''} pts
+                            </td>
                             <td className="py-3 px-4 text-center text-success-400 font-semibold">{p.correct_answers}</td>
                             <td className="py-3 px-4 text-center text-danger-400 font-semibold">{p.wrong_answers}</td>
                             <td className="py-3 px-4 text-right">
