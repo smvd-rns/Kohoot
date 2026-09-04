@@ -60,7 +60,10 @@ export default function QuizzesPage() {
       await quizService.deleteQuiz(quiz.id)
       setQuizzes(q => q.filter(x => x.id !== quiz.id))
       toast.success('Quiz deleted')
-    } catch { toast.error('Delete failed') }
+    } catch (err: any) {
+      console.error('Failed to delete quiz:', err)
+      toast.error(err?.message || 'Delete failed')
+    }
     setDeleteModal(null)
   }
 
