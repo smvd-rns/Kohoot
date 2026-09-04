@@ -363,6 +363,11 @@ export const quizService = {
     return data
   },
 
+  async deleteSession(sessionId: string): Promise<void> {
+    const { error } = await supabase.from('quiz_sessions').delete().eq('id', sessionId)
+    if (error) throw error
+  },
+
 
   async advanceQuestion(sessionId: string, index: number) {
     const { error } = await supabase

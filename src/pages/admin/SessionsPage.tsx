@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Play, Copy, QrCode, Users, Clock, XCircle, MonitorPlay, BookOpen, Link2, Pencil } from 'lucide-react'
+import { Plus, Play, Copy, QrCode, Users, Clock, XCircle, MonitorPlay, BookOpen, Link2, Pencil, Trash2 } from 'lucide-react'
 import { Button, Card, Badge, EmptyState, Modal, Select, Avatar, Spinner, Input } from '@/components/ui'
 import { useAuthStore } from '@/store/authStore'
 import { quizService } from '@/services/quiz.service'
@@ -27,6 +27,10 @@ export default function SessionsPage() {
   const [qrModal, setQrModal] = useState<QuizSession | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
+
+  // Delete session modal state
+  const [deleteSessionModal, setDeleteSessionModal] = useState<QuizSession | null>(null)
+  const [deletingSession, setDeletingSession] = useState(false)
 
   // Custom link states
   const [customLinkEnabled, setCustomLinkEnabled] = useState(false)
@@ -159,6 +163,21 @@ export default function SessionsPage() {
       toast.error('Failed to update deadline')
     } finally {
       setUpdatingDeadline(false)
+    }
+  }
+
+  const handleDeleteSession = async () => {
+    if (!deleteSessionModal) return
+    setDeletingSession(true)
+    try {
+      await quizService.deleteSession(deleteSessionModal.id)
+      setSessions(prev => prev.filter(s => s.id !== deleteSessionModal.id))
+      setDeleteSessionModal(null)
+      toast.success('Session deleted successfully')
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete session')
+    } finally {
+      setDeletingSession(false)
     }
   }
 
@@ -322,11 +341,15 @@ export default function SessionsPage() {
                               />
                             )}
                             {s.status !== 'completed' && (
-                              <Button variant="ghost" size="sm" className="p-2 h-9 w-9 text-danger-400 hover:text-danger-500 hover:bg-danger-500/10" leftIcon={<XCircle className="w-4 h-4" />}
+                              <Button variant="ghost" size="sm" className="p-2 h-9 w-9 text-warning-400 hover:text-warning-500 hover:bg-warning-500/10" leftIcon={<XCircle className="w-4 h-4" />}
                                 onClick={() => handleEndSession(s.id)}
                                 title="End Session"
                               />
                             )}
+                            <Button variant="ghost" size="sm" className="p-2 h-9 w-9 text-danger-400 hover:text-danger-500 hover:bg-danger-500/10" leftIcon={<Trash2 className="w-4 h-4" />}
+                              onClick={() => setDeleteSessionModal(s)}
+                              title="Delete Session"
+                            />
                           </div>
 
                           {/* Primary action */}
@@ -861,6 +884,23 @@ export default function SessionsPage() {
               <Button variant="outline" className="flex-1" onClick={() => setDeadlineModalSession(null)}>Cancel</Button>
               <Button className="flex-1" isLoading={updatingDeadline} onClick={handleUpdateDeadline}>
                 Save Deadline
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete Session modal */}
+      <Modal open={!!deleteSessionModal} onClose={() => setDeleteSessionModal(null)} title="Delete Session" size="sm">
+        {deleteSessionModal && (
+          <div className="space-y-4">
+            <p className="text-sm text-theme-secondary leading-relaxed">
+              Are you sure you want to delete session <strong className="text-theme-primary">{deleteSessionModal.title || deleteSessionModal.room_code}</strong>? This action cannot be undone and all associated responses and leaderboard entries will be permanently removed.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteSessionModal(null)}>Cancel</Button>
+              <Button variant="danger" className="flex-1" isLoading={deletingSession} onClick={handleDeleteSession}>
+                Delete Session
               </Button>
             </div>
           </div>

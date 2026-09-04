@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore } from '@/store/authStore'
 import { quizService } from '@/services/quiz.service'
-import { Card, StatCard, Spinner, Button, Badge, Avatar, EmptyState } from '@/components/ui'
+import { Card, StatCard, Spinner, Button, Badge, Avatar, EmptyState, Modal } from '@/components/ui'
 import {
   ArrowLeft,
   Calendar,
@@ -21,6 +21,7 @@ import {
   SlidersHorizontal,
   Clock,
   Link2,
+  Trash2,
 } from 'lucide-react'
 import { formatDate, timeAgo, getTheme } from '@/lib/utils'
 import toast from 'react-hot-toast'
@@ -80,6 +81,29 @@ export default function ReportsPage() {
   const [allTimePageSize, setAllTimePageSize] = useState(10)
   const [detailPage, setDetailPage] = useState(1)
   const [detailPageSize, setDetailPageSize] = useState(10)
+
+  // Delete session modal state
+  const [deleteSessionModal, setDeleteSessionModal] = useState<QuizSession | null>(null)
+  const [deletingSession, setDeletingSession] = useState(false)
+
+  const handleDeleteSession = async () => {
+    if (!deleteSessionModal) return
+    setDeletingSession(true)
+    try {
+      await quizService.deleteSession(deleteSessionModal.id)
+      setSessions(prev => prev.filter(s => s.id !== deleteSessionModal.id))
+      if (report?.session.id === deleteSessionModal.id) {
+        setReport(null)
+        setSearchParams({})
+      }
+      setDeleteSessionModal(null)
+      toast.success('Session deleted successfully')
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete session')
+    } finally {
+      setDeletingSession(false)
+    }
+  }
 
   // Detail report controls
   const [detailSearch, setDetailSearch] = useState('')
@@ -488,9 +512,12 @@ export default function ReportsPage() {
                               </td>
                               <td className="px-6 py-4 text-center font-bold text-theme-primary">{participantCount}</td>
                               <td className="px-6 py-4 text-right" onClick={e => e.stopPropagation()}>
-                                <Button size="xs" variant="ghost" rightIcon={<ChevronRight className="w-3.5 h-3.5" />} onClick={() => handleSelectSession(s.id)}>
-                                  View Report
-                                </Button>
+                                <div className="flex items-center justify-end gap-1">
+                                  <Button size="xs" variant="ghost" rightIcon={<ChevronRight className="w-3.5 h-3.5" />} onClick={() => handleSelectSession(s.id)}>
+                                    View Report
+                                  </Button>
+                                  <Button size="xs" variant="ghost" className="text-danger-400 hover:text-danger-500 hover:bg-danger-500/10 p-1.5" leftIcon={<Trash2 className="w-3.5 h-3.5" />} onClick={(e) => { e.stopPropagation(); setDeleteSessionModal(s) }} title="Delete Session" />
+                                </div>
                               </td>
                             </tr>
                           )
@@ -927,6 +954,23 @@ export default function ReportsPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Delete Session modal */}
+      <Modal open={!!deleteSessionModal} onClose={() => setDeleteSessionModal(null)} title="Delete Session" size="sm">
+        {deleteSessionModal && (
+          <div className="space-y-4">
+            <p className="text-sm text-theme-secondary leading-relaxed">
+              Are you sure you want to delete session <strong className="text-theme-primary">{deleteSessionModal.title || deleteSessionModal.room_code}</strong>? This action cannot be undone and all associated responses and leaderboard entries will be permanently removed.
+            </p>
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" className="flex-1" onClick={() => setDeleteSessionModal(null)}>Cancel</Button>
+              <Button variant="danger" className="flex-1" isLoading={deletingSession} onClick={handleDeleteSession}>
+                Delete Session
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
