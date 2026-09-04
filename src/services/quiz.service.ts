@@ -232,7 +232,7 @@ export const quizService = {
   },
 
   // ── Sessions ──────────────────────────────────────────────────────────────────
-  async createSession(quizId: string, adminId: string, opts?: { mode?: 'live' | 'self_paced'; deadline?: string; participantMode?: 'any' | 'registered_only'; quizIds?: string[]; transitionMessages?: string[]; title?: string }) {
+  async createSession(quizId: string, adminId: string, opts?: { mode?: 'live' | 'self_paced'; deadline?: string; participantMode?: 'any' | 'registered_only'; quizIds?: string[]; transitionMessages?: string[]; title?: string; customLinkEnabled?: boolean; customLinkUrl?: string; customLinkLabel?: string }) {
     const roomCode = generateRoomCode()
     const finalQuizIds = opts?.quizIds && opts.quizIds.length > 0 ? opts.quizIds : [quizId]
     const currentQuizId = finalQuizIds[0]
@@ -249,6 +249,9 @@ export const quizService = {
       current_quiz_id: currentQuizId,
       transition_messages: opts?.transitionMessages ?? [],
       title: opts?.title || null,
+      custom_link_enabled: opts?.customLinkEnabled ?? false,
+      custom_link_url: opts?.customLinkUrl || null,
+      custom_link_label: opts?.customLinkLabel || null,
     }
     if (opts?.deadline) insertData.deadline = opts.deadline
     const { data, error } = await supabase
@@ -319,6 +322,9 @@ export const quizService = {
     mode?: 'live' | 'self_paced';
     participantMode?: 'any' | 'registered_only';
     deadline?: string | null;
+    customLinkEnabled?: boolean;
+    customLinkUrl?: string;
+    customLinkLabel?: string;
   }) {
     const finalQuizIds = opts.quizIds && opts.quizIds.length > 0 ? opts.quizIds : [opts.quizId]
     const currentQuizId = finalQuizIds[0]
@@ -329,6 +335,9 @@ export const quizService = {
       quiz_ids: finalQuizIds,
       current_quiz_id: currentQuizId,
       transition_messages: opts.transitionMessages ?? [],
+      custom_link_enabled: opts.customLinkEnabled ?? false,
+      custom_link_url: opts.customLinkUrl || null,
+      custom_link_label: opts.customLinkLabel || null,
     }
 
     if (opts.mode) {

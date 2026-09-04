@@ -146,6 +146,9 @@ export interface QuizSession {
   current_quiz_id?: string
   transition_messages?: string[]
   title?: string
+  custom_link_enabled?: boolean
+  custom_link_url?: string
+  custom_link_label?: string
   // Relations
   quiz?: Quiz
   participants?: SessionParticipant[]

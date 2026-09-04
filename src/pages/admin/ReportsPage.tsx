@@ -20,6 +20,7 @@ import {
   X,
   SlidersHorizontal,
   Clock,
+  Link2,
 } from 'lucide-react'
 import { formatDate, timeAgo, getTheme } from '@/lib/utils'
 import toast from 'react-hot-toast'
@@ -608,6 +609,12 @@ export default function ReportsPage() {
                     <span>•</span>
                     <span>Conducted {timeAgo(report.session.created_at)}</span>
                   </p>
+                  {report.session.custom_link_enabled && report.session.custom_link_url && (
+                    <div className="mt-2 inline-flex items-center gap-2 text-xs bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 px-3 py-1.5 rounded-xl font-medium">
+                      <Link2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Custom Link: <a href={report.session.custom_link_url.startsWith('http') ? report.session.custom_link_url : `https://${report.session.custom_link_url}`} target="_blank" rel="noopener noreferrer" className="underline font-bold hover:text-emerald-200">{report.session.custom_link_label || 'Join Group'}</a> ({report.session.custom_link_url})</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <Button variant="outline" leftIcon={<Download className="w-4 h-4" />} onClick={handleExportReport}>

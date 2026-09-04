@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import ReactConfetti from 'react-confetti'
-import { Trophy, Star, Home, RotateCcw, Download } from 'lucide-react'
+import { Trophy, Star, Home, RotateCcw, Download, ExternalLink, MessageCircle } from 'lucide-react'
 import { Button, Avatar } from '@/components/ui'
 import { quizService } from '@/services/quiz.service'
 import { useAuthStore } from '@/store/authStore'
@@ -20,13 +20,21 @@ export default function ResultsPage() {
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight })
   const [sessionMode, setSessionMode] = useState<'live' | 'self_paced'>('live')
   const [quizBreakdown, setQuizBreakdown] = useState<Array<{ quizId: string; title: string; score: number; maxScore: number }>>([])
+  const [customLinkInfo, setCustomLinkInfo] = useState<{ enabled: boolean; url: string; label: string } | null>(null)
 
   useEffect(() => {
     window.addEventListener('resize', () => setWindowSize({ width: window.innerWidth, height: window.innerHeight }))
     if (!sessionId || !profile) return
 
-    quizService.getSession(sessionId).then(async (session) => {
-      setSessionMode((session as any).mode ?? 'live')
+    quizService.getSession(sessionId).then(async (session: any) => {
+      setSessionMode(session.mode ?? 'live')
+      if (session.custom_link_enabled && session.custom_link_url) {
+        setCustomLinkInfo({
+          enabled: true,
+          url: session.custom_link_url,
+          label: session.custom_link_label || 'Open Link',
+        })
+      }
       
       if (session.quiz_ids && session.quiz_ids.length > 1) {
         try {
@@ -238,6 +246,26 @@ export default function ResultsPage() {
               ))}
             </motion.div>
           </>
+        )}
+
+        {/* Custom Link Button */}
+        {customLinkInfo?.enabled && customLinkInfo?.url && (
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="w-full max-w-md mb-8"
+          >
+            <a
+              href={customLinkInfo.url.startsWith('http') ? customLinkInfo.url : `https://${customLinkInfo.url}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2.5 px-6 py-4 rounded-2xl bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-500 hover:to-purple-500 text-white font-black text-base transition-all shadow-xl hover:scale-[1.02] active:scale-[0.98] w-full border border-white/10"
+            >
+              <span>{customLinkInfo.label || 'Open Link'}</span>
+              <ExternalLink className="w-5 h-5" />
+            </a>
+          </motion.div>
         )}
 
         {/* Actions */}

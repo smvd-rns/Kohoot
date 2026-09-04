@@ -28,6 +28,11 @@ export default function SessionsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
+  // Custom link states
+  const [customLinkEnabled, setCustomLinkEnabled] = useState(false)
+  const [customLinkUrl, setCustomLinkUrl] = useState('')
+  const [customLinkLabel, setCustomLinkLabel] = useState('')
+
   // Multi-quiz states
   const [isMultiQuiz, setIsMultiQuiz] = useState(false)
   const [selectedQuizIds, setSelectedQuizIds] = useState<string[]>([])
@@ -48,6 +53,9 @@ export default function SessionsPage() {
     setParticipantMode('any')
     setDeadline('')
     setIsMultiQuiz(false)
+    setCustomLinkEnabled(false)
+    setCustomLinkUrl('')
+    setCustomLinkLabel('')
     const publishedQuizzes = quizzes.filter(x => x.is_published)
     const defaultQ = quizIdFromUrl && quizzes.some(x => x.id === quizIdFromUrl)
       ? quizIdFromUrl
@@ -63,6 +71,9 @@ export default function SessionsPage() {
     setSessionTitle(s.title || '')
     setSessionMode(s.mode ?? 'live')
     setParticipantMode(s.participant_mode ?? 'any')
+    setCustomLinkEnabled(s.custom_link_enabled ?? false)
+    setCustomLinkUrl(s.custom_link_url || '')
+    setCustomLinkLabel(s.custom_link_label || '')
     if (s.deadline) {
       const d = new Date(s.deadline)
       const tzOffset = d.getTimezoneOffset() * 60000
@@ -105,6 +116,9 @@ export default function SessionsPage() {
         mode: sessionMode,
         participantMode,
         deadline: sessionMode === 'self_paced' && deadline ? new Date(deadline).toISOString() : null,
+        customLinkEnabled,
+        customLinkUrl: customLinkEnabled ? customLinkUrl.trim() : undefined,
+        customLinkLabel: customLinkEnabled ? customLinkLabel.trim() : undefined,
       })
       setSessions(prev => prev.map(x => x.id === editSessionModal.id ? { ...x, ...updated } : x))
       setEditSessionModal(null)
@@ -185,6 +199,9 @@ export default function SessionsPage() {
         quizIds: isMultiQuiz ? selectedQuizIds : [selectedQuizId],
         transitionMessages: isMultiQuiz ? transitionMessages : [],
         title: sessionTitle.trim() || undefined,
+        customLinkEnabled,
+        customLinkUrl: customLinkEnabled ? customLinkUrl.trim() : undefined,
+        customLinkLabel: customLinkEnabled ? customLinkLabel.trim() : undefined,
       })
       setSessions(s => [session as unknown as QuizSession, ...s])
       setCreateModal(false)
@@ -533,6 +550,41 @@ export default function SessionsPage() {
             </div>
           )}
 
+          {/* Custom Link Option / External Resource */}
+          <div className="space-y-3 p-3.5 rounded-2xl glass border border-theme">
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="font-bold text-sm text-theme-primary flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-brand-400" /> Enable Custom Link / Resource
+              </span>
+              <input
+                type="checkbox"
+                checked={customLinkEnabled}
+                onChange={e => setCustomLinkEnabled(e.target.checked)}
+                className="rounded border-white/20 bg-white/5 text-brand-500 focus:ring-brand-500 w-4 h-4 cursor-pointer"
+              />
+            </label>
+            <p className="text-xs text-theme-secondary">
+              If enabled, this clickable link (e.g. WhatsApp Group, website, channel, document) will be shown to participants on their report page.
+            </p>
+
+            {customLinkEnabled && (
+              <div className="space-y-3 pt-2 border-t border-white/10">
+                <Input
+                  label="Custom Link URL"
+                  placeholder="https://example.com/..."
+                  value={customLinkUrl}
+                  onChange={e => setCustomLinkUrl(e.target.value)}
+                />
+                <Input
+                  label="Button Label (Optional)"
+                  placeholder="e.g. Join Group, Visit Website, Open Resource..."
+                  value={customLinkLabel}
+                  onChange={e => setCustomLinkLabel(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
           <p className="text-xs text-theme-secondary">A unique room code will be generated. Students join using this code.</p>
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={() => setCreateModal(false)}>Cancel</Button>
@@ -692,6 +744,41 @@ export default function SessionsPage() {
                 <p className="text-xs text-theme-secondary mt-1">Students won't be able to submit after this time.</p>
               </div>
             )}
+
+            {/* Custom Link Option / External Resource */}
+            <div className="space-y-3 p-3.5 rounded-2xl glass border border-theme">
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="font-bold text-sm text-theme-primary flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-brand-400" /> Enable Custom Link / Resource
+                </span>
+                <input
+                  type="checkbox"
+                  checked={customLinkEnabled}
+                  onChange={e => setCustomLinkEnabled(e.target.checked)}
+                  className="rounded border-white/20 bg-white/5 text-brand-500 focus:ring-brand-500 w-4 h-4 cursor-pointer"
+                />
+              </label>
+              <p className="text-xs text-theme-secondary">
+                If enabled, this clickable link (e.g. WhatsApp Group, website, channel, document) will be shown to participants on their report page.
+              </p>
+
+              {customLinkEnabled && (
+                <div className="space-y-3 pt-2 border-t border-white/10">
+                  <Input
+                    label="Custom Link URL"
+                    placeholder="https://example.com/..."
+                    value={customLinkUrl}
+                    onChange={e => setCustomLinkUrl(e.target.value)}
+                  />
+                  <Input
+                    label="Button Label (Optional)"
+                    placeholder="e.g. Join Group, Visit Website, Open Resource..."
+                    value={customLinkLabel}
+                    onChange={e => setCustomLinkLabel(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
 
             <p className="text-xs text-brand-400 font-semibold bg-brand-500/10 p-2.5 rounded-xl border border-brand-500/20">
               ⚡ Room Code <strong>{editSessionModal.room_code}</strong> and QR Code remain unchanged.
